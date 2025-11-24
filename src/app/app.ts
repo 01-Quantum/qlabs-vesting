@@ -1,11 +1,12 @@
 import { Component, signal, inject, effect } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
+import { DatePipe } from '@angular/common';
 import { WalletService } from './services/wallet.service';
 import { VestingService } from './services/vesting.service';
 
 @Component({
   selector: 'app-root',
-  imports: [RouterOutlet],
+  imports: [RouterOutlet, DatePipe],
   templateUrl: './app.html',
   styleUrl: './app.scss'
 })

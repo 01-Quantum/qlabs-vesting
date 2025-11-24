@@ -1,73 +1,91 @@
 <main class="main-container">
   <h1>QLabs Vesting</h1>
   
-  <div class="wallet-section">
-    @if (walletService.currentAccount(); as account) {
-      <div class="connected-view">
-        <p>Connected Address:</p>
-        <code class="address-display">{{ account }}</code>
-        
-        <div class="balances-container">
-          @if (walletService.hypeBalance(); as hypeBalance) {
-            <div class="balance-item">
-              <p>HYPE Balance:</p>
-              <code class="balance-value">{{ hypeBalance }} HYPE</code>
+  <div class="content-grid">
+    <!-- Global Stats Section -->
+    <div class="stats-section">
+      <div class="stat-card">
+        <h3>TGE Date</h3>
+        <p>{{ vestingService.tgeDate() | date:'mediumDate' }}</p>
+      </div>
+      <div class="stat-card">
+        <h3>Total Allocated</h3>
+        <p>{{ vestingService.totalAllocated() }} QLABS</p>
+      </div>
+      <div class="stat-card">
+        <h3>Total Claimed</h3>
+        <p>{{ vestingService.totalClaimed() }} QLABS</p>
+      </div>
+    </div>
+
+    <div class="wallet-section">
+      @if (walletService.currentAccount(); as account) {
+        <div class="connected-view">
+          <p>Connected Address:</p>
+          <code class="address-display">{{ account }}</code>
+          
+          <div class="balances-container">
+            @if (walletService.hypeBalance(); as hypeBalance) {
+              <div class="balance-item">
+                <p>HYPE Balance:</p>
+                <code class="balance-value">{{ hypeBalance }} HYPE</code>
+              </div>
+            }
+
+            @if (walletService.qoneBalance(); as qoneBalance) {
+              <div class="balance-item">
+                <p>QLABS Balance:</p>
+                <code class="balance-value">{{ qoneBalance }} QLABS</code>
+                <button (click)="walletService.addTokenToMetaMask()" class="btn btn-small btn-outline" title="Add QLABS to MetaMask">
+                  + Add to MetaMask
+                </button>
+              </div>
+            }
+          </div>
+
+          @if (vestingService.claimableAmount(); as claimable) {
+            <div class="vesting-section">
+              <div class="balance-item">
+                <p>Total Claimable Vested Tokens:</p>
+                <code class="balance-value claimable">{{ claimable }} QLABS</code>
+              </div>
+              
+              <div class="claim-actions">
+                @for (category of vestingService.claimableCategories(); track category.category) {
+                  <div class="claim-item">
+                    <p>{{ category.name }}: {{ category.amount }} QLABS</p>
+                    <button 
+                      (click)="vestingService.claim(category.category)" 
+                      class="btn btn-claim" 
+                      [disabled]="vestingService.isClaiming()"
+                    >
+                      {{ vestingService.isClaiming() ? 'Claiming...' : 'Claim' }}
+                    </button>
+                  </div>
+                }
+                
+                @if (vestingService.error()) {
+                  <p class="error-message">{{ vestingService.error() }}</p>
+                }
+              </div>
             </div>
           }
 
-          @if (walletService.qoneBalance(); as qoneBalance) {
-            <div class="balance-item">
-              <p>QLABS Balance:</p>
-              <code class="balance-value">{{ qoneBalance }} QLABS</code>
-              <button (click)="walletService.addTokenToMetaMask()" class="btn btn-small btn-outline" title="Add QLABS to MetaMask">
-                + Add to MetaMask
-              </button>
-            </div>
+          <button (click)="walletService.disconnectWallet()" class="btn btn-disconnect">
+            Disconnect
+          </button>
+        </div>
+      } @else {
+        <div class="connect-view">
+          <button (click)="walletService.connectWallet()" class="btn btn-connect" [disabled]="walletService.isConnecting()">
+            {{ walletService.isConnecting() ? 'Connecting...' : 'Connect to MetaMask' }}
+          </button>
+          @if (walletService.error()) {
+            <p class="error-message">{{ walletService.error() }}</p>
           }
         </div>
-
-        @if (vestingService.claimableAmount(); as claimable) {
-          <div class="vesting-section">
-            <div class="balance-item">
-              <p>Total Claimable Vested Tokens:</p>
-              <code class="balance-value claimable">{{ claimable }} QLABS</code>
-            </div>
-            
-            <div class="claim-actions">
-              @for (category of vestingService.claimableCategories(); track category.category) {
-                <div class="claim-item">
-                  <p>{{ category.name }}: {{ category.amount }} QLABS</p>
-                  <button 
-                    (click)="vestingService.claim(category.category)" 
-                    class="btn btn-claim" 
-                    [disabled]="vestingService.isClaiming()"
-                  >
-                    {{ vestingService.isClaiming() ? 'Claiming...' : 'Claim' }}
-                  </button>
-                </div>
-              }
-              
-              @if (vestingService.error()) {
-                <p class="error-message">{{ vestingService.error() }}</p>
-              }
-            </div>
-          </div>
-        }
-
-        <button (click)="walletService.disconnectWallet()" class="btn btn-disconnect">
-          Disconnect
-        </button>
-      </div>
-    } @else {
-      <div class="connect-view">
-        <button (click)="walletService.connectWallet()" class="btn btn-connect" [disabled]="walletService.isConnecting()">
-          {{ walletService.isConnecting() ? 'Connecting...' : 'Connect to MetaMask' }}
-        </button>
-        @if (walletService.error()) {
-          <p class="error-message">{{ walletService.error() }}</p>
-        }
-      </div>
-    }
+      }
+    </div>
   </div>
 </main>
 

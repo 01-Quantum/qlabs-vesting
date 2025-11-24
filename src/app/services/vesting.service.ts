@@ -11,6 +11,9 @@ const VESTING_ABI = [
   'function claim(uint8 category) external',
   'function initializeMyAllocation(uint256 totalAmount, uint8 category, bytes32[] calldata proof) external',
   'function getAllocation(address beneficiary, uint8 category) external view returns (tuple(uint256 totalAmount, uint256 claimedAmount, bool initialized))',
+  'function tgeTimestamp() external view returns (uint256)',
+  'function totalAllocated() external view returns (uint256)',
+  'function totalClaimed() external view returns (uint256)'
 ];
 
 export interface CategoryClaim {
@@ -30,6 +33,11 @@ export class VestingService {
   public isClaiming: WritableSignal<boolean> = signal(false);
   public error: WritableSignal<string | null> = signal(null);
 
+  // Global Stats
+  public tgeDate: WritableSignal<Date | null> = signal(null);
+  public totalAllocated: WritableSignal<string | null> = signal(null);
+  public totalClaimed: WritableSignal<string | null> = signal(null);
+
   private categoryNames: {[key: number]: string} = {
     0: 'Token Sale Tier 1',
     1: 'Token Sale Tier 2',
@@ -39,7 +47,30 @@ export class VestingService {
     5: 'Community Airdrops'
   };
 
-  constructor() {}
+  constructor() {
+    this.fetchGlobalStats();
+  }
+
+  public async fetchGlobalStats() {
+    try {
+      const provider = new JsonRpcProvider(TESTNET_RPC_URL);
+      const contract = new Contract(VESTING_ADDRESS, VESTING_ABI, provider);
+
+      const [tgeTs, totalAlloc, totalClm] = await Promise.all([
+        contract['tgeTimestamp'](),
+        contract['totalAllocated'](),
+        contract['totalClaimed']()
+      ]);
+
+      // tgeTs is BigInt in seconds, convert to ms for JS Date
+      this.tgeDate.set(new Date(Number(tgeTs) * 1000));
+      this.totalAllocated.set(formatUnits(totalAlloc, 18));
+      this.totalClaimed.set(formatUnits(totalClm, 18));
+
+    } catch (err) {
+      console.error('Error fetching global vesting stats:', err);
+    }
+  }
 
   // We will call this when wallet connects
   public async fetchClaimableAmount(address: string) {
@@ -88,6 +119,8 @@ export class VestingService {
         // Refresh balances after claim
         const address = await signer.getAddress();
         await this.fetchClaimableAmount(address);
+        // Refresh global stats too as totalClaimed changed
+        await this.fetchGlobalStats();
         
       } catch (err: any) {
         console.error('Error claiming tokens:', err);
