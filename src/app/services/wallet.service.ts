@@ -2,7 +2,7 @@ import { Injectable, signal, WritableSignal } from '@angular/core';
 import { BrowserProvider, Contract, formatEther, JsonRpcProvider } from 'ethers';
 
 const TESTNET_RPC_URL = 'https://rpc.hyperliquid-testnet.xyz/evm';
-const QONE_TOKEN_ADDRESS = '0xBE6e1CC2FD781E6fEA59ca9dD051D3a43cCf4970';
+const QONE_TOKEN_ADDRESS = '0xe2493Ee32Ac5094c0541014D1b7fF64E1557807d';
 
 const ERC20_ABI = [
   'function balanceOf(address owner) view returns (uint256)',

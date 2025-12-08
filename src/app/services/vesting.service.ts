@@ -3,7 +3,7 @@ import { Contract, formatUnits, Interface } from 'ethers';
 import { WalletService } from './wallet.service';
 import { JsonRpcProvider, BrowserProvider } from 'ethers';
 
-const VESTING_ADDRESS = '0x8dE5841F4f6df89FB593b9FF155f44E66ADe247D';
+const VESTING_ADDRESS = '0x8d8125C526E7a5685d218B0d994254e09D72c179';
 const TESTNET_RPC_URL = 'https://rpc.hyperliquid-testnet.xyz/evm';
 
 const VESTING_ABI = [
