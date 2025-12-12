@@ -1,5 +1,5 @@
 <main class="main-container">
-  <h1>QLabs Vesting</h1>
+  <h1>qONE Vesting</h1>
   
   <div class="content-grid">
     <!-- Global Stats Section -->
@@ -10,11 +10,11 @@
       </div>
       <div class="stat-card">
         <h3>Total Allocated</h3>
-        <p>{{ vestingService.totalAllocated() }} QLABS</p>
+        <p>{{ vestingService.totalAllocated() }} qONE</p>
       </div>
       <div class="stat-card">
         <h3>Total Claimed</h3>
-        <p>{{ vestingService.totalClaimed() }} QLABS</p>
+        <p>{{ vestingService.totalClaimed() }} qONE</p>
       </div>
     </div>
 
@@ -34,8 +34,8 @@
 
             @if (walletService.qoneBalance(); as qoneBalance) {
               <div class="balance-item">
-                <p>QLABS Balance:</p>
-                <code class="balance-value">{{ qoneBalance }} QLABS</code>
+                <p>qONE Balance:</p>
+                <code class="balance-value">{{ qoneBalance }} qONE</code>
                 <button (click)="walletService.addTokenToMetaMask()" class="btn btn-small btn-outline" title="Add QLABS to MetaMask">
                   + Add to MetaMask
                 </button>
@@ -47,13 +47,13 @@
             <div class="vesting-section">
               <div class="balance-item">
                 <p>Total Claimable Vested Tokens:</p>
-                <code class="balance-value claimable">{{ claimable }} QLABS</code>
+                <code class="balance-value claimable">{{ claimable }} qONE</code>
               </div>
               
               <div class="claim-actions">
                 @for (category of vestingService.claimableCategories(); track category.category) {
                   <div class="claim-item">
-                    <p>{{ category.name }}: {{ category.amount }} QLABS</p>
+                    <p>{{ category.name }}: {{ category.amount }} qONE</p>
                     <button 
                       (click)="vestingService.claim(category.category)" 
                       class="btn btn-claim" 
