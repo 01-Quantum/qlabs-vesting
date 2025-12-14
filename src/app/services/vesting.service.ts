@@ -31,7 +31,11 @@ export class VestingService {
   public claimableAmount: WritableSignal<string | null> = signal(null);
   public claimableCategories: WritableSignal<CategoryClaim[]> = signal([]);
   public isClaiming: WritableSignal<boolean> = signal(false);
+  public isInitializing: WritableSignal<boolean> = signal(false);
+  public initializationNeeded: WritableSignal<boolean> = signal(false);
   public error: WritableSignal<string | null> = signal(null);
+
+  private apiUrl = 'https://uvqnyufffifclezqkmzh.supabase.co/functions/v1/proof-by-address';
 
   // Global Stats
   public tgeDate: WritableSignal<Date | null> = signal(null);
@@ -75,6 +79,9 @@ export class VestingService {
   // We will call this when wallet connects
   public async fetchClaimableAmount(address: string) {
     try {
+      // Check initialization status first
+      this.checkInitializationNeeded(address);
+
       const provider = new JsonRpcProvider(TESTNET_RPC_URL);
       const contract = new Contract(VESTING_ADDRESS, VESTING_ABI, provider);
       
@@ -128,6 +135,80 @@ export class VestingService {
       } finally {
         this.isClaiming.set(false);
       }
+    }
+  }
+
+  public async checkInitializationNeeded(address: string) {
+    try {
+      const provider = new JsonRpcProvider(TESTNET_RPC_URL);
+      const contract = new Contract(VESTING_ADDRESS, VESTING_ABI, provider);
+
+      // Fetch API data
+      const response = await fetch(`${this.apiUrl}?address=${address}`);
+      if (!response.ok) return;
+      const json = await response.json();
+      const allocations = json.data || [];
+
+      let needed = false;
+      for (const alloc of allocations) {
+        const category = alloc.category;
+        const allocData = await contract['getAllocation'](address, category);
+        // allocData is [totalAmount, claimedAmount, initialized]
+        if (!allocData[2]) {
+          needed = true;
+          break;
+        }
+      }
+      this.initializationNeeded.set(needed);
+    } catch (err) {
+      console.error('Error checking initialization:', err);
+    }
+  }
+
+  public async initializeAllocations(address: string) {
+    this.isInitializing.set(true);
+    this.error.set(null);
+
+    try {
+      const response = await fetch(`${this.apiUrl}?address=${address}`);
+      if (!response.ok) throw new Error('Failed to fetch allocation data');
+      const json = await response.json();
+      const allocations = json.data || [];
+
+      if (typeof window !== 'undefined' && (window as any).ethereum) {
+        const provider = new BrowserProvider((window as any).ethereum);
+        const signer = await provider.getSigner();
+        const contract = new Contract(VESTING_ADDRESS, VESTING_ABI, signer);
+
+        for (const alloc of allocations) {
+          const { category, amount_wei, proof } = alloc;
+          
+          const allocData = await contract['getAllocation'](address, category);
+          if (!allocData[2]) {
+            // Convert amount_wei to BigInt
+            let amountVal: bigint;
+            if (typeof amount_wei === 'number') {
+              amountVal = BigInt(amount_wei);
+            } else {
+              amountVal = BigInt(amount_wei);
+            }
+
+            console.log(`Initializing category ${category} with amount ${amountVal}`);
+            const tx = await contract['initializeMyAllocation'](amountVal, category, proof);
+            await tx.wait();
+          }
+        }
+        
+        // Refresh
+        this.initializationNeeded.set(false);
+        await this.fetchClaimableAmount(address);
+        await this.fetchGlobalStats();
+      }
+    } catch (err: any) {
+      console.error('Error initializing allocations:', err);
+      this.error.set(err.message || 'Failed to initialize allocations');
+    } finally {
+      this.isInitializing.set(false);
     }
   }
 }

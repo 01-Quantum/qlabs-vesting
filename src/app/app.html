@@ -59,6 +59,19 @@
             }
           </div>
 
+          @if (vestingService.initializationNeeded()) {
+            <div class="init-section">
+              <p class="warning-text">You have pending vesting allocations to initialize.</p>
+              <button 
+                (click)="vestingService.initializeAllocations(account)" 
+                class="btn btn-init"
+                [disabled]="vestingService.isInitializing()"
+              >
+                {{ vestingService.isInitializing() ? 'Initializing...' : 'Initialize Allocations' }}
+              </button>
+            </div>
+          }
+
           @if (vestingService.claimableAmount(); as claimable) {
             <div class="vesting-section">
               <div class="balance-item">
