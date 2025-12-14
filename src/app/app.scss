@@ -1,3 +1,78 @@
+.top-announcement-bar {
+  display: block;
+  background-color: #a3ff12;
+  color: #000;
+  text-decoration: none;
+  font-family: 'Inter', sans-serif;
+  width: 100%;
+  position: relative;
+  z-index: 10;
+}
+
+.announcement-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  max-width: 1200px;
+  margin: 0 auto;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.content-left {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.icon {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+}
+
+.message {
+  text-align: left;
+}
+
+.read-more {
+  white-space: nowrap;
+  font-weight: 700;
+  margin-left: 1rem;
+}
+
+.top-announcement-bar:hover {
+  background-color: #8ce60e;
+}
+
+@media (max-width: 768px) {
+  .announcement-content {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.5rem;
+  }
+  
+  .content-left {
+    justify-content: center;
+    text-align: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  
+  .message {
+    text-align: center;
+  }
+  
+  .read-more {
+    display: block;
+    width: 100%;
+    text-align: center;
+    margin-left: 0;
+    margin-top: 0.25rem;
+  }
+}
+
 .main-container {
   display: flex;
   flex-direction: column;
@@ -21,7 +96,7 @@
   transform: translateY(-50%);
   width: 600px; /* Adjust size as needed */
   height: 600px;
-  background-image: url("/qlabs-vesting/assets/qone.webp");
+  background-image: url("/assets/qone.webp");
   background-size: contain;
   background-repeat: no-repeat;
   background-position: center;
