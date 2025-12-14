@@ -1,8 +1,6 @@
 import { Injectable, signal, WritableSignal } from '@angular/core';
 import { BrowserProvider, Contract, formatEther, JsonRpcProvider } from 'ethers';
-
-const TESTNET_RPC_URL = 'https://rpc.hyperliquid-testnet.xyz/evm';
-const QONE_TOKEN_ADDRESS = '0xe2493Ee32Ac5094c0541014D1b7fF64E1557807d';
+import { environment } from '../../environments/environment';
 
 const ERC20_ABI = [
   'function balanceOf(address owner) view returns (uint256)',
@@ -101,7 +99,7 @@ export class WalletService {
 
   private async fetchHypeBalance(address: string) {
     try {
-      const provider = new JsonRpcProvider(TESTNET_RPC_URL);
+      const provider = new JsonRpcProvider(environment.networkRpcUrl);
       const balance = await provider.getBalance(address);
       this.hypeBalance.set(formatEther(balance));
     } catch (err) {
@@ -112,8 +110,8 @@ export class WalletService {
 
   private async fetchQoneBalance(address: string) {
     try {
-      const provider = new JsonRpcProvider(TESTNET_RPC_URL);
-      const contract = new Contract(QONE_TOKEN_ADDRESS, ERC20_ABI, provider);
+      const provider = new JsonRpcProvider(environment.networkRpcUrl);
+      const contract = new Contract(environment.coinAddress, ERC20_ABI, provider);
       
       const [balance, decimals] = await Promise.all([
         contract['balanceOf'](address),
@@ -136,7 +134,7 @@ export class WalletService {
           params: {
             type: 'ERC20',
             options: {
-              address: QONE_TOKEN_ADDRESS,
+              address: environment.coinAddress,
               symbol: 'QLABS',
               decimals: 18,
             },

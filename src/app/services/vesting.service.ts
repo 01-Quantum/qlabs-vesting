@@ -2,9 +2,7 @@ import { Injectable, signal, WritableSignal, inject } from '@angular/core';
 import { Contract, formatUnits, Interface } from 'ethers';
 import { WalletService } from './wallet.service';
 import { JsonRpcProvider, BrowserProvider } from 'ethers';
-
-const VESTING_ADDRESS = '0x8d8125C526E7a5685d218B0d994254e09D72c179';
-const TESTNET_RPC_URL = 'https://rpc.hyperliquid-testnet.xyz/evm';
+import { environment } from '../../environments/environment';
 
 const VESTING_ABI = [
   'function getClaimableAmount(address beneficiary, uint8 category) public view returns (uint256)',
@@ -35,8 +33,6 @@ export class VestingService {
   public initializationNeeded: WritableSignal<boolean> = signal(false);
   public error: WritableSignal<string | null> = signal(null);
 
-  private apiUrl = 'https://uvqnyufffifclezqkmzh.supabase.co/functions/v1/proof-by-address';
-
   // Global Stats
   public tgeDate: WritableSignal<Date | null> = signal(null);
   public totalAllocated: WritableSignal<string | null> = signal(null);
@@ -57,8 +53,8 @@ export class VestingService {
 
   public async fetchGlobalStats() {
     try {
-      const provider = new JsonRpcProvider(TESTNET_RPC_URL);
-      const contract = new Contract(VESTING_ADDRESS, VESTING_ABI, provider);
+      const provider = new JsonRpcProvider(environment.networkRpcUrl);
+      const contract = new Contract(environment.vestingContractAddress, VESTING_ABI, provider);
 
       const [tgeTs, totalAlloc, totalClm] = await Promise.all([
         contract['tgeTimestamp'](),
@@ -82,8 +78,8 @@ export class VestingService {
       // Check initialization status first
       this.checkInitializationNeeded(address);
 
-      const provider = new JsonRpcProvider(TESTNET_RPC_URL);
-      const contract = new Contract(VESTING_ADDRESS, VESTING_ABI, provider);
+      const provider = new JsonRpcProvider(environment.networkRpcUrl);
+      const contract = new Contract(environment.vestingContractAddress, VESTING_ABI, provider);
       
       let totalClaimable = 0n;
       const claims: CategoryClaim[] = [];
@@ -118,7 +114,7 @@ export class VestingService {
       try {
         const provider = new BrowserProvider((window as any).ethereum);
         const signer = await provider.getSigner();
-        const contract = new Contract(VESTING_ADDRESS, VESTING_ABI, signer);
+        const contract = new Contract(environment.vestingContractAddress, VESTING_ABI, signer);
 
         const tx = await contract['claim'](category);
         await tx.wait();
@@ -140,11 +136,11 @@ export class VestingService {
 
   public async checkInitializationNeeded(address: string) {
     try {
-      const provider = new JsonRpcProvider(TESTNET_RPC_URL);
-      const contract = new Contract(VESTING_ADDRESS, VESTING_ABI, provider);
+      const provider = new JsonRpcProvider(environment.networkRpcUrl);
+      const contract = new Contract(environment.vestingContractAddress, VESTING_ABI, provider);
 
       // Fetch API data
-      const response = await fetch(`${this.apiUrl}?address=${address}`);
+      const response = await fetch(`${environment.supabaseRestUrl}?address=${address}`);
       if (!response.ok) return;
       const json = await response.json();
       const allocations = json.data || [];
@@ -170,7 +166,7 @@ export class VestingService {
     this.error.set(null);
 
     try {
-      const response = await fetch(`${this.apiUrl}?address=${address}`);
+      const response = await fetch(`${environment.supabaseRestUrl}?address=${address}`);
       if (!response.ok) throw new Error('Failed to fetch allocation data');
       const json = await response.json();
       const allocations = json.data || [];
@@ -178,7 +174,7 @@ export class VestingService {
       if (typeof window !== 'undefined' && (window as any).ethereum) {
         const provider = new BrowserProvider((window as any).ethereum);
         const signer = await provider.getSigner();
-        const contract = new Contract(VESTING_ADDRESS, VESTING_ABI, signer);
+        const contract = new Contract(environment.vestingContractAddress, VESTING_ABI, signer);
 
         for (const alloc of allocations) {
           const { category, amount_wei, proof } = alloc;
