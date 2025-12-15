@@ -32,6 +32,12 @@
         <h3>Global Claimed</h3>
         <p>{{ vestingService.totalClaimed() | number:'1.0-0' }} qONE</p>
       </div>
+      @if (walletService.hypeBalance(); as hypeBalance) {
+        <div class="stat-card">
+          <h3>HYPE Balance</h3>
+          <p>{{ hypeBalance | number:'1.0-6' }} HYPE</p>
+        </div>
+      }
     </div>
 
     <div class="wallet-section">
@@ -55,17 +61,6 @@
           }
 
           <div class="balances-container">
-            @if (walletService.hypeBalance(); as hypeBalance) {
-              <div class="balance-item">
-                <code class="balance-value text-left">
-                  <div class="allocation-row">
-                    <span>HYPE Balance:</span>
-                    <span>{{ hypeBalance | number:'1.0-6' }} HYPE</span>
-                  </div>
-                </code>
-              </div>
-            }
-
             @if (walletService.qoneBalance(); as qoneBalance) {
               <div class="balance-item">
                 <div class="balance-value-row">
