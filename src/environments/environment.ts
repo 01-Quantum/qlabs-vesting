@@ -1,7 +1,7 @@
 export const environment = {
   production: false,
-  vestingContractAddress: '0x8d8125C526E7a5685d218B0d994254e09D72c179',
-  coinAddress: '0xe2493Ee32Ac5094c0541014D1b7fF64E1557807d',
+  vestingContractAddress: '0x6089cdFC15A0F71Bcbb1c54FA9F0D8d3FEe235fB',
+  coinAddress: '0x9ad49fC9Cb2a998ed2De48CFb6DE81bf9Ce1ea3C',
   networkRpcUrl: 'https://rpc.hyperliquid-testnet.xyz/evm',
   supabaseRestUrl: 'https://uvqnyufffifclezqkmzh.supabase.co/functions/v1/proof-by-address'
 };

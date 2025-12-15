@@ -33,6 +33,9 @@ export class VestingService {
   public initializationNeeded: WritableSignal<boolean> = signal(false);
   public error: WritableSignal<string | null> = signal(null);
 
+  // User Stats
+  public userAllocations: WritableSignal<CategoryClaim[]> = signal([]);
+
   // Global Stats
   public tgeDate: WritableSignal<Date | null> = signal(null);
   public totalAllocated: WritableSignal<string | null> = signal(null);
@@ -145,19 +148,35 @@ export class VestingService {
       const json = await response.json();
       const allocations = json.data || [];
 
+      // Populate user allocations from Supabase data
+      const userAllocs: CategoryClaim[] = [];
       let needed = false;
+
       for (const alloc of allocations) {
         const category = alloc.category;
+        
+        // Add to user allocations list
+        userAllocs.push({
+          category: category,
+          name: this.categoryNames[category],
+          amount: formatUnits(BigInt(alloc.amount_wei), 18)
+        });
+
         const allocData = await contract['getAllocation'](address, category);
         // allocData is [totalAmount, claimedAmount, initialized]
         if (!allocData[2]) {
           needed = true;
-          break;
+          // Don't break here so we can continue processing other allocations if needed, 
+          // though for 'needed' flag true is enough. 
+          // But we want to process all userAllocs.
         }
       }
+      
+      this.userAllocations.set(userAllocs);
       this.initializationNeeded.set(needed);
     } catch (err) {
       console.error('Error checking initialization:', err);
+      this.userAllocations.set([]);
     }
   }
 

@@ -25,11 +25,11 @@
         <p>{{ vestingService.tgeDate() | date:'mediumDate' }}</p>
       </div>
       <div class="stat-card">
-        <h3>Total Allocated</h3>
+        <h3>Global Allocated</h3>
         <p>{{ vestingService.totalAllocated() | number:'1.0-0' }} qONE</p>
       </div>
       <div class="stat-card">
-        <h3>Total Claimed</h3>
+        <h3>Global Claimed</h3>
         <p>{{ vestingService.totalClaimed() | number:'1.0-0' }} qONE</p>
       </div>
     </div>
@@ -40,21 +40,47 @@
           <p>Connected Address:</p>
           <code class="address-display">{{ account }}</code>
           
+          @if (vestingService.userAllocations().length > 0) {
+            <div class="balance-item">
+              <p>Allocations:</p>
+              <div class="balance-value allocations-list">
+                @for (alloc of vestingService.userAllocations(); track alloc.category) {
+                  <div class="allocation-row">
+                    <span>{{ alloc.name }}:</span>
+                    <span>{{ alloc.amount | number:'1.0-6' }} qONE</span>
+                  </div>
+                }
+              </div>
+            </div>
+          }
+
           <div class="balances-container">
             @if (walletService.hypeBalance(); as hypeBalance) {
               <div class="balance-item">
-                <p>HYPE Balance:</p>
-                <code class="balance-value">{{ hypeBalance | number:'1.0-6' }} HYPE</code>
+                <code class="balance-value text-left">
+                  <div class="allocation-row">
+                    <span>HYPE Balance:</span>
+                    <span>{{ hypeBalance | number:'1.0-6' }} HYPE</span>
+                  </div>
+                </code>
               </div>
             }
 
             @if (walletService.qoneBalance(); as qoneBalance) {
               <div class="balance-item">
-                <p>qONE Balance:</p>
-                <code class="balance-value">{{ qoneBalance | number:'1.0-2' }} qONE</code>
-                <button (click)="walletService.addTokenToMetaMask()" class="btn btn-small btn-outline" title="Add QLABS to MetaMask">
-                  + Add to MetaMask
-                </button>
+                <div class="balance-value-row">
+                  <code class="balance-value text-left flex-grow">
+                    <div class="allocation-row">
+                      <span>qONE Balance:</span>
+                      <span>{{ qoneBalance | number:'1.0-2' }} qONE</span>
+                    </div>
+                  </code>
+                  <button (click)="walletService.addTokenToMetaMask()" class="btn-icon" title="Add QLABS to MetaMask">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M12 5v14M5 12h14"/>
+                    </svg>
+                  </button>
+                </div>
               </div>
             }
           </div>

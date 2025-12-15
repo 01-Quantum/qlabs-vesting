@@ -112,6 +112,12 @@ h1 {
   justify-content: center;
 }
 
+.user-stats {
+  margin-bottom: 0;
+  padding-bottom: 2rem;
+  border-bottom: 1px solid #333;
+}
+
 .stat-card {
   background: #111;
   padding: 1rem;
@@ -188,10 +194,26 @@ h1 {
   gap: 1rem;
 }
 
+.allocations-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  text-align: left;
+}
+
+.allocation-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  font-size: 0.9rem;
+}
+
 .balance-item p {
   margin-bottom: 0.5rem;
   color: #fff;
   font-weight: 500;
+  text-align: left; /* Align labels left */
 }
 
 .balance-value {
@@ -200,12 +222,28 @@ h1 {
   font-weight: bold;
   margin: 0;
   border: 1px solid #a3ff12;
+  text-align: center; /* Default center */
+}
+
+.balance-value.text-left {
+  text-align: left;
 }
 
 .balance-value.claimable {
   background: #222;
   color: #a3ff12;
   border: 1px solid #a3ff12;
+}
+
+.balance-value-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: stretch;
+}
+
+.balance-value.flex-grow {
+  flex-grow: 1;
+  margin: 0;
 }
 
 .vesting-section {
@@ -265,6 +303,24 @@ h1 {
   cursor: pointer;
   transition: all 0.2s;
   font-size: 1rem;
+}
+
+.btn-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 1rem;
+  background: transparent;
+  border: 1px solid #a3ff12;
+  color: #a3ff12;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-icon:hover {
+  background: #a3ff12;
+  color: #000;
 }
 
 .btn-connect {
