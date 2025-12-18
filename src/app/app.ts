@@ -25,4 +25,12 @@ export class App {
       }
     });
   }
+
+  public async refresh() {
+    await this.walletService.refreshBalances();
+    const account = this.walletService.currentAccount();
+    if (account) {
+      await this.vestingService.fetchClaimableAmount(account);
+    }
+  }
 }

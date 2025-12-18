@@ -23,6 +23,7 @@ interface EIP6963ProviderDetail {
 })
 export class WalletService {
   public currentAccount: WritableSignal<string | null> = signal(null);
+  public accounts: WritableSignal<string[]> = signal([]);
   public isConnecting: WritableSignal<boolean> = signal(false);
   public error: WritableSignal<string | null> = signal(null);
   public hypeBalance: WritableSignal<string | null> = signal(null);
@@ -75,9 +76,17 @@ export class WalletService {
         const browserProvider = new BrowserProvider(provider);
         const accounts = await browserProvider.listAccounts();
         if (accounts.length > 0) {
-          const address = accounts[0].address;
-          this.currentAccount.set(address);
-          this.fetchBalances(address);
+          const addresses = accounts.map(a => a.address);
+          this.accounts.set(addresses);
+          
+          // If currentAccount is not set or not in the list, set it to the first one
+          const current = this.currentAccount();
+          if (!current || !addresses.includes(current)) {
+             this.currentAccount.set(addresses[0]);
+             this.fetchBalances(addresses[0]);
+          } else {
+             this.fetchBalances(current);
+          }
         }
       } catch (err) {
         console.error('Error checking wallet connection:', err);
@@ -89,9 +98,14 @@ export class WalletService {
     const provider = this.getMetaMaskProvider();
     if (provider) {
       provider.on('accountsChanged', (accounts: string[]) => {
+        this.accounts.set(accounts);
         if (accounts.length > 0) {
-          this.currentAccount.set(accounts[0]);
-          this.fetchBalances(accounts[0]);
+           // If currentAccount is not in the new list, switch to the first one
+           const current = this.currentAccount();
+           if (!current || !accounts.includes(current)) {
+             this.currentAccount.set(accounts[0]);
+             this.fetchBalances(accounts[0]);
+           }
         } else {
           this.currentAccount.set(null);
           this.resetBalances();
@@ -143,10 +157,16 @@ export class WalletService {
         const accounts = await provider.send("eth_requestAccounts", []);
         
         if (accounts && accounts.length > 0) {
-           const signer = await provider.getSigner();
-           const address = await signer.getAddress();
-           this.currentAccount.set(address);
-           await this.fetchBalances(address);
+           this.accounts.set(accounts);
+           
+           // Upon explicit connect, usually the user wants to use the first account or the one they just selected
+           // But here we can just update the list. The signer part below was taking the first account implicitly.
+           
+           // We can't easily get 'signer' for a specific account from BrowserProvider unless we pass the index or address?
+           // Actually getSigner() without args gets the first one.
+           // Let's use the first one as default active.
+           this.currentAccount.set(accounts[0]);
+           await this.fetchBalances(accounts[0]);
         }
 
       } catch (err: any) {
@@ -225,7 +245,22 @@ export class WalletService {
 
   public disconnectWallet() {
     this.currentAccount.set(null);
+    this.accounts.set([]);
     this.resetBalances();
+  }
+
+  public switchAccount(address: string) {
+    if (this.accounts().includes(address)) {
+      this.currentAccount.set(address);
+      this.fetchBalances(address);
+    }
+  }
+
+  public async refreshBalances() {
+    const current = this.currentAccount();
+    if (current) {
+      await this.fetchBalances(current);
+    }
   }
 
   private resetBalances() {
