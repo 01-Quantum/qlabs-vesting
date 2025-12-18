@@ -70,11 +70,14 @@ export class WalletService {
   }
 
   private async checkIfWalletIsConnected() {
+    console.log('WalletService: Checking if wallet is connected...');
     const provider = this.getMetaMaskProvider();
     if (provider) {
       try {
         const browserProvider = new BrowserProvider(provider);
         const accounts = await browserProvider.listAccounts();
+        console.log('WalletService: Found accounts:', accounts.map(a => a.address));
+        
         if (accounts.length > 0) {
           const addresses = accounts.map(a => a.address);
           this.accounts.set(addresses);
@@ -82,15 +85,21 @@ export class WalletService {
           // If currentAccount is not set or not in the list, set it to the first one
           const current = this.currentAccount();
           if (!current || !addresses.includes(current)) {
+             console.log('WalletService: Auto-selecting first account:', addresses[0]);
              this.currentAccount.set(addresses[0]);
              this.fetchBalances(addresses[0]);
           } else {
+             console.log('WalletService: Maintaining current account:', current);
              this.fetchBalances(current);
           }
+        } else {
+          console.log('WalletService: No accounts found connected');
         }
       } catch (err) {
         console.error('Error checking wallet connection:', err);
       }
+    } else {
+      console.log('WalletService: No provider found');
     }
   }
 
@@ -98,15 +107,20 @@ export class WalletService {
     const provider = this.getMetaMaskProvider();
     if (provider) {
       provider.on('accountsChanged', (accounts: string[]) => {
+        console.log('WalletService: accountsChanged event:', accounts);
         this.accounts.set(accounts);
         if (accounts.length > 0) {
            // If currentAccount is not in the new list, switch to the first one
            const current = this.currentAccount();
            if (!current || !accounts.includes(current)) {
+             console.log('WalletService: Switching to new primary account:', accounts[0]);
              this.currentAccount.set(accounts[0]);
              this.fetchBalances(accounts[0]);
+           } else {
+             console.log('WalletService: Current account still valid:', current);
            }
         } else {
+          console.log('WalletService: All accounts disconnected');
           this.currentAccount.set(null);
           this.resetBalances();
         }
@@ -139,6 +153,7 @@ export class WalletService {
   }
 
   public async connectWallet() {
+    console.log('WalletService: connectWallet called');
     this.isConnecting.set(true);
     this.error.set(null);
     
@@ -146,15 +161,20 @@ export class WalletService {
 
     if (metaMaskProvider) {
       try {
+        console.log('WalletService: Requesting permissions...');
         await metaMaskProvider.request({
           method: "wallet_requestPermissions",
           params: [{ eth_accounts: {} }]
         });
 
+        console.log('WalletService: Checking network...');
         await this.addOrSwitchNetwork(metaMaskProvider);
         
         const provider = new BrowserProvider(metaMaskProvider);
+        console.log('WalletService: Requesting accounts...');
         const accounts = await provider.send("eth_requestAccounts", []);
+        
+        console.log('WalletService: Connected accounts:', accounts);
         
         if (accounts && accounts.length > 0) {
            this.accounts.set(accounts);
@@ -165,6 +185,7 @@ export class WalletService {
            // We can't easily get 'signer' for a specific account from BrowserProvider unless we pass the index or address?
            // Actually getSigner() without args gets the first one.
            // Let's use the first one as default active.
+           console.log('WalletService: Setting active account to:', accounts[0]);
            this.currentAccount.set(accounts[0]);
            await this.fetchBalances(accounts[0]);
         }
@@ -180,6 +201,7 @@ export class WalletService {
         this.isConnecting.set(false);
       }
     } else {
+      console.warn('WalletService: MetaMask not installed');
       this.error.set('MetaMask is not installed');
       this.isConnecting.set(false);
     }
@@ -250,14 +272,18 @@ export class WalletService {
   }
 
   public switchAccount(address: string) {
+    console.log('WalletService: Switching account to:', address);
     if (this.accounts().includes(address)) {
       this.currentAccount.set(address);
       this.fetchBalances(address);
+    } else {
+      console.warn('WalletService: Attempted to switch to unknown account:', address);
     }
   }
 
   public async refreshBalances() {
     const current = this.currentAccount();
+    console.log('WalletService: Refreshing balances for:', current);
     if (current) {
       await this.fetchBalances(current);
     }
