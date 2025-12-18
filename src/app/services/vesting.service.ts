@@ -56,7 +56,7 @@ export class VestingService {
 
   public async fetchGlobalStats() {
     try {
-      const provider = new JsonRpcProvider(environment.networkRpcUrl);
+      const provider = new JsonRpcProvider(environment.networkDetails.rpcUrls[0]);
       const contract = new Contract(environment.vestingContractAddress, VESTING_ABI, provider);
 
       const [tgeTs, totalAlloc, totalClm] = await Promise.all([
@@ -81,7 +81,7 @@ export class VestingService {
       // Check initialization status first
       this.checkInitializationNeeded(address);
 
-      const provider = new JsonRpcProvider(environment.networkRpcUrl);
+      const provider = new JsonRpcProvider(environment.networkDetails.rpcUrls[0]);
       const contract = new Contract(environment.vestingContractAddress, VESTING_ABI, provider);
       
       let totalClaimable = 0n;
@@ -139,7 +139,7 @@ export class VestingService {
 
   public async checkInitializationNeeded(address: string) {
     try {
-      const provider = new JsonRpcProvider(environment.networkRpcUrl);
+      const provider = new JsonRpcProvider(environment.networkDetails.rpcUrls[0]);
       const contract = new Contract(environment.vestingContractAddress, VESTING_ABI, provider);
 
       // Fetch API data
