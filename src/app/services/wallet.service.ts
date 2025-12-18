@@ -34,6 +34,26 @@ export class WalletService {
     this.listenForAccountChanges();
   }
 
+  public getBrowserProvider(): BrowserProvider | null {
+    const provider = this.getMetaMaskProvider();
+    if (!provider) return null;
+    return new BrowserProvider(provider);
+  }
+
+  public async getSigner(address?: string) {
+    const provider = this.getBrowserProvider();
+    if (!provider) throw new Error('No provider available');
+    
+    // If address is provided, try to get signer for that specific address
+    // Otherwise use current account or default
+    const targetAddress = address || this.currentAccount();
+    if (targetAddress) {
+      return await provider.getSigner(targetAddress);
+    } else {
+      return await provider.getSigner();
+    }
+  }
+
   private getMetaMaskProvider(): any | null {
     // 1. Fallback for older environments or when EIP-6963 is missed
     if (typeof window === 'undefined') return null;
@@ -208,6 +228,7 @@ export class WalletService {
   }
 
   private async fetchBalances(address: string) {
+    console.log('WalletService: Fetching balances for:', address);
     await Promise.all([
       this.fetchHypeBalance(address),
       this.fetchQoneBalance(address)
@@ -215,10 +236,13 @@ export class WalletService {
   }
 
   private async fetchHypeBalance(address: string) {
+    console.log('WalletService: Fetching HYPE balance...');
     try {
       const provider = new JsonRpcProvider(environment.networkDetails.rpcUrls[0]);
       const balance = await provider.getBalance(address);
-      this.hypeBalance.set(formatEther(balance));
+      const formatted = formatEther(balance);
+      console.log('WalletService: HYPE balance fetched:', formatted);
+      this.hypeBalance.set(formatted);
     } catch (err) {
       console.error('Error fetching HYPE balance:', err);
       this.hypeBalance.set(null);
@@ -226,6 +250,7 @@ export class WalletService {
   }
 
   private async fetchQoneBalance(address: string) {
+    console.log('WalletService: Fetching QONE balance...');
     try {
       const provider = new JsonRpcProvider(environment.networkDetails.rpcUrls[0]);
       const contract = new Contract(environment.coinAddress, ERC20_ABI, provider);
@@ -236,7 +261,9 @@ export class WalletService {
       ]);
 
       const { formatUnits } = await import('ethers');
-      this.qoneBalance.set(formatUnits(balance, decimals));
+      const formatted = formatUnits(balance, decimals);
+      console.log('WalletService: QONE balance fetched:', formatted);
+      this.qoneBalance.set(formatted);
     } catch (err) {
       console.error('Error fetching QONE balance:', err);
       this.qoneBalance.set(null);
@@ -244,6 +271,7 @@ export class WalletService {
   }
 
   public async addTokenToMetaMask() {
+    console.log('WalletService: addTokenToMetaMask called');
     const provider = this.getMetaMaskProvider();
     if (provider) {
       try {
@@ -258,14 +286,18 @@ export class WalletService {
             },
           },
         });
+        console.log('WalletService: Token added to MetaMask request sent');
       } catch (error) {
-        console.error(error);
+        console.error('WalletService: Failed to add token:', error);
         this.error.set('Failed to add token to MetaMask');
       }
+    } else {
+        console.warn('WalletService: Provider not found for addTokenToMetaMask');
     }
   }
 
   public disconnectWallet() {
+    console.log('WalletService: Disconnecting wallet...');
     this.currentAccount.set(null);
     this.accounts.set([]);
     this.resetBalances();
@@ -290,6 +322,7 @@ export class WalletService {
   }
 
   private resetBalances() {
+    console.log('WalletService: Resetting balances');
     this.hypeBalance.set(null);
     this.qoneBalance.set(null);
   }

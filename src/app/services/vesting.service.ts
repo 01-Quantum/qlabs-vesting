@@ -55,6 +55,7 @@ export class VestingService {
   }
 
   public async fetchGlobalStats() {
+    console.log('VestingService: Fetching global stats...');
     try {
       const provider = new JsonRpcProvider(environment.networkDetails.rpcUrls[0]);
       const contract = new Contract(environment.vestingContractAddress, VESTING_ABI, provider);
@@ -64,6 +65,8 @@ export class VestingService {
         contract['totalAllocated'](),
         contract['totalClaimed']()
       ]);
+      
+      console.log('VestingService: Global stats fetched:', { tgeTs, totalAlloc, totalClm });
 
       // tgeTs is BigInt in seconds, convert to ms for JS Date
       this.tgeDate.set(new Date(Number(tgeTs) * 1000));
@@ -77,6 +80,7 @@ export class VestingService {
 
   // We will call this when wallet connects
   public async fetchClaimableAmount(address: string) {
+    console.log(`VestingService: Fetching claimable amount for ${address}`);
     try {
       // Check initialization status first
       this.checkInitializationNeeded(address);
@@ -90,6 +94,7 @@ export class VestingService {
       for (let i = 0; i <= 5; i++) {
         const amount = await contract['getClaimableAmount'](address, i);
         if (amount > 0n) {
+          console.log(`VestingService: Found claimable amount for category ${i}: ${amount}`);
           totalClaimable += amount;
           claims.push({
             category: i,
@@ -98,6 +103,8 @@ export class VestingService {
           });
         }
       }
+      
+      console.log(`VestingService: Total claimable for ${address}: ${totalClaimable}`);
 
       this.claimableAmount.set(formatUnits(totalClaimable, 18));
       this.claimableCategories.set(claims);
@@ -110,45 +117,54 @@ export class VestingService {
   }
 
   public async claim(category: number) {
+    console.log(`VestingService: Attempting to claim category ${category}`);
     this.isClaiming.set(true);
     this.error.set(null);
 
-    if (typeof window !== 'undefined' && (window as any).ethereum) {
-      try {
-        const provider = new BrowserProvider((window as any).ethereum);
-        // Use the currently selected account
-        const currentAccount = this.walletService.currentAccount();
-        const signer = await provider.getSigner(currentAccount || undefined);
-        const contract = new Contract(environment.vestingContractAddress, VESTING_ABI, signer);
+    try {
+      // Use wallet service to get signer
+      const currentAccount = this.walletService.currentAccount();
+      console.log('VestingService: Getting signer for account:', currentAccount);
+      
+      const signer = await this.walletService.getSigner(currentAccount || undefined);
+      const contract = new Contract(environment.vestingContractAddress, VESTING_ABI, signer);
 
-        const tx = await contract['claim'](category);
-        await tx.wait();
-        
-        // Refresh balances after claim
-        const address = await signer.getAddress();
-        await this.fetchClaimableAmount(address);
-        // Refresh global stats too as totalClaimed changed
-        await this.fetchGlobalStats();
-        
-      } catch (err: any) {
-        console.error('Error claiming tokens:', err);
-        this.error.set(err.message || 'Failed to claim tokens');
-      } finally {
-        this.isClaiming.set(false);
-      }
+      const tx = await contract['claim'](category);
+      console.log('VestingService: Claim transaction sent:', tx.hash);
+      
+      await tx.wait();
+      console.log('VestingService: Claim transaction confirmed');
+      
+      // Refresh balances after claim
+      const address = await signer.getAddress();
+      await this.fetchClaimableAmount(address);
+      // Refresh global stats too as totalClaimed changed
+      await this.fetchGlobalStats();
+      
+    } catch (err: any) {
+      console.error('Error claiming tokens:', err);
+      this.error.set(err.message || 'Failed to claim tokens');
+    } finally {
+      this.isClaiming.set(false);
     }
   }
 
   public async checkInitializationNeeded(address: string) {
+    console.log(`VestingService: Checking initialization needed for ${address}`);
     try {
       const provider = new JsonRpcProvider(environment.networkDetails.rpcUrls[0]);
       const contract = new Contract(environment.vestingContractAddress, VESTING_ABI, provider);
 
       // Fetch API data
       const response = await fetch(`${environment.supabaseRestUrl}?address=${address}`);
-      if (!response.ok) return;
+      if (!response.ok) {
+          console.error('VestingService: Failed to fetch Supabase data');
+          return;
+      }
       const json = await response.json();
       const allocations = json.data || [];
+      
+      console.log(`VestingService: Found ${allocations.length} allocations in DB for ${address}`);
 
       // Populate user allocations from Supabase data
       const userAllocs: CategoryClaim[] = [];
@@ -167,10 +183,13 @@ export class VestingService {
         const allocData = await contract['getAllocation'](address, category);
         // allocData is [totalAmount, claimedAmount, initialized]
         if (!allocData[2]) {
+          console.log(`VestingService: Allocation for category ${category} needs initialization`);
           needed = true;
           // Don't break here so we can continue processing other allocations if needed, 
           // though for 'needed' flag true is enough. 
           // But we want to process all userAllocs.
+        } else {
+             console.log(`VestingService: Allocation for category ${category} already initialized`);
         }
       }
       
@@ -183,6 +202,7 @@ export class VestingService {
   }
 
   public async initializeAllocations(address: string) {
+    console.log(`VestingService: initializeAllocations called for ${address}`);
     this.isInitializing.set(true);
     this.error.set(null);
 
@@ -191,11 +211,13 @@ export class VestingService {
       if (!response.ok) throw new Error('Failed to fetch allocation data');
       const json = await response.json();
       const allocations = json.data || [];
+      
+      console.log('VestingService: Allocations to process:', allocations);
 
-      if (typeof window !== 'undefined' && (window as any).ethereum) {
-        const provider = new BrowserProvider((window as any).ethereum);
-        // Use the specific address passed to the function for signing
-        const signer = await provider.getSigner(address);
+      try {
+        // Use wallet service to get signer
+        console.log('VestingService: Getting signer for address:', address);
+        const signer = await this.walletService.getSigner(address);
         const contract = new Contract(environment.vestingContractAddress, VESTING_ABI, signer);
 
         for (const alloc of allocations) {
@@ -211,9 +233,13 @@ export class VestingService {
               amountVal = BigInt(amount_wei);
             }
 
-            console.log(`Initializing category ${category} with amount ${amountVal}`);
+            console.log(`VestingService: Initializing category ${category} with amount ${amountVal}, proof: ${proof}`);
             const tx = await contract['initializeMyAllocation'](amountVal, category, proof);
+            console.log('VestingService: Initialization tx sent:', tx.hash);
             await tx.wait();
+            console.log('VestingService: Initialization tx confirmed');
+          } else {
+              console.log(`VestingService: Skipping category ${category}, already initialized`);
           }
         }
         
@@ -221,6 +247,8 @@ export class VestingService {
         this.initializationNeeded.set(false);
         await this.fetchClaimableAmount(address);
         await this.fetchGlobalStats();
+      } catch (e) {
+          throw e;
       }
     } catch (err: any) {
       console.error('Error initializing allocations:', err);
