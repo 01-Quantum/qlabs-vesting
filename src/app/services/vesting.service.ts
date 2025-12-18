@@ -116,7 +116,9 @@ export class VestingService {
     if (typeof window !== 'undefined' && (window as any).ethereum) {
       try {
         const provider = new BrowserProvider((window as any).ethereum);
-        const signer = await provider.getSigner();
+        // Use the currently selected account
+        const currentAccount = this.walletService.currentAccount();
+        const signer = await provider.getSigner(currentAccount || undefined);
         const contract = new Contract(environment.vestingContractAddress, VESTING_ABI, signer);
 
         const tx = await contract['claim'](category);
@@ -192,7 +194,8 @@ export class VestingService {
 
       if (typeof window !== 'undefined' && (window as any).ethereum) {
         const provider = new BrowserProvider((window as any).ethereum);
-        const signer = await provider.getSigner();
+        // Use the specific address passed to the function for signing
+        const signer = await provider.getSigner(address);
         const contract = new Contract(environment.vestingContractAddress, VESTING_ABI, signer);
 
         for (const alloc of allocations) {
