@@ -30,6 +30,8 @@ export class VestingService {
   public claimableCategories: WritableSignal<CategoryClaim[]> = signal([]);
   public isClaiming: WritableSignal<boolean> = signal(false);
   public isInitializing: WritableSignal<boolean> = signal(false);
+  public initializingCategoryName: WritableSignal<string | null> = signal(null);
+  public uninitializedAllocations: WritableSignal<CategoryClaim[]> = signal([]);
   public initializationNeeded: WritableSignal<boolean> = signal(false);
   public error: WritableSignal<string | null> = signal(null);
 
@@ -168,23 +170,28 @@ export class VestingService {
 
       // Populate user allocations from Supabase data
       const userAllocs: CategoryClaim[] = [];
+      const uninitializedAllocs: CategoryClaim[] = [];
       let needed = false;
 
       for (const alloc of allocations) {
         const category = alloc.category;
+        const amountWei = BigInt(alloc.amount_wei);
         
-        // Add to user allocations list
-        userAllocs.push({
+        const claimObj: CategoryClaim = {
           category: category,
           name: this.categoryNames[category],
-          amount: formatUnits(BigInt(alloc.amount_wei), 18)
-        });
+          amount: formatUnits(amountWei, 18)
+        };
+        
+        // Add to user allocations list
+        userAllocs.push(claimObj);
 
         const allocData = await contract['getAllocation'](address, category);
         // allocData is [totalAmount, claimedAmount, initialized]
         if (!allocData[2]) {
           console.log(`VestingService: Allocation for category ${category} needs initialization`);
           needed = true;
+          uninitializedAllocs.push(claimObj);
           // Don't break here so we can continue processing other allocations if needed, 
           // though for 'needed' flag true is enough. 
           // But we want to process all userAllocs.
@@ -195,9 +202,11 @@ export class VestingService {
       
       this.userAllocations.set(userAllocs);
       this.initializationNeeded.set(needed);
+      this.uninitializedAllocations.set(uninitializedAllocs);
     } catch (err) {
       console.error('Error checking initialization:', err);
       this.userAllocations.set([]);
+      this.uninitializedAllocations.set([]);
     }
   }
 
@@ -234,10 +243,17 @@ export class VestingService {
             }
 
             console.log(`VestingService: Initializing category ${category} with amount ${amountVal}, proof: ${proof}`);
+            
+            // Set the initializing category name
+            this.initializingCategoryName.set(this.categoryNames[category]);
+            
             const tx = await contract['initializeMyAllocation'](amountVal, category, proof);
             console.log('VestingService: Initialization tx sent:', tx.hash);
             await tx.wait();
             console.log('VestingService: Initialization tx confirmed');
+            
+            // Clear the initializing category name
+            this.initializingCategoryName.set(null);
           } else {
               console.log(`VestingService: Skipping category ${category}, already initialized`);
           }
@@ -255,6 +271,7 @@ export class VestingService {
       this.error.set(err.message || 'Failed to initialize allocations');
     } finally {
       this.isInitializing.set(false);
+      this.initializingCategoryName.set(null);
     }
   }
 }

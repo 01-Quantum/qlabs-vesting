@@ -460,3 +460,28 @@ h1 {
   cursor: not-allowed;
 }
 
+.pending-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1rem 0;
+  text-align: left;
+}
+
+.pending-item {
+  color: #a3ff12;
+  font-size: 0.9rem;
+  padding: 0.25rem 0;
+  padding-left: 1rem;
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.pending-item::before {
+  content: "•";
+  position: absolute;
+  left: 0;
+  color: #a3ff12;
+}
+

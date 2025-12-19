@@ -97,13 +97,25 @@
 
           @if (vestingService.initializationNeeded()) {
             <div class="init-section">
-              <p class="warning-text">You have pending vesting allocations to initialize.</p>
+              <p class="warning-text">You have pending vesting allocations to initialize:</p>
+              <ul class="pending-list">
+                @for (alloc of vestingService.uninitializedAllocations(); track alloc.category) {
+                  <li class="pending-item">
+                    <span>{{ alloc.name }}</span>
+                    <span>{{ alloc.amount | number:'1.0-6' }} qONE</span>
+                  </li>
+                }
+              </ul>
               <button 
                 (click)="vestingService.initializeAllocations(account)" 
                 class="btn btn-init"
                 [disabled]="vestingService.isInitializing()"
               >
-                {{ vestingService.isInitializing() ? 'Initializing...' : 'Initialize Allocations' }}
+                {{ 
+                  vestingService.isInitializing() 
+                    ? 'Initializing ' + (vestingService.initializingCategoryName() || '') + '...' 
+                    : 'Initialize ' + (vestingService.uninitializedAllocations().length === 1 ? vestingService.uninitializedAllocations()[0].name : 'Allocations (' + vestingService.uninitializedAllocations().length + ')') 
+                }}
               </button>
             </div>
           }
