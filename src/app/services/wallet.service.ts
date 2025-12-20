@@ -61,9 +61,17 @@ export class WalletService {
         console.log('WalletService: WalletConnect QR URI:', uri);
       });
       
-      this.walletConnectProvider.on('connect', (info: any) => {
+      this.walletConnectProvider.on('connect', async (info: any) => {
         console.log('WalletService: WalletConnect connect event:', info);
-        // Connection established, set provider type
+        // Connection established, check network first
+        try {
+          console.log('WalletService: Checking network...');
+          await this.addOrSwitchNetwork(this.walletConnectProvider);
+        } catch (err) {
+          console.error('WalletService: Failed to switch network:', err);
+        }
+        
+        // Set provider type and accounts
         if (this.walletConnectProvider?.accounts?.length > 0) {
           this.activeProviderType.set('walletconnect');
           const accounts = this.walletConnectProvider.accounts;
