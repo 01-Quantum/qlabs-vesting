@@ -29,11 +29,16 @@ export class WalletService {
   public error: WritableSignal<string | null> = signal(null);
   public hypeBalance: WritableSignal<string | null> = signal(null);
   public qoneBalance: WritableSignal<string | null> = signal(null);
+  public activeProviderType: WritableSignal<'metamask' | 'walletconnect' | null> = signal(null);
   
   private walletConnectProvider: any | null = null;
 
   constructor() {
-    this.checkIfWalletIsConnected();
+    // Only auto-connect if user hasn't explicitly disconnected
+    const hasDisconnected = localStorage.getItem('wallet_disconnected');
+    if (!hasDisconnected) {
+      this.checkIfWalletIsConnected();
+    }
     this.listenForAccountChanges();
   }
 
@@ -76,9 +81,16 @@ export class WalletService {
   }
 
   public getBrowserProvider(): BrowserProvider | null {
+    if (this.activeProviderType() === 'walletconnect' && this.walletConnectProvider) {
+        return new BrowserProvider(this.walletConnectProvider);
+    }
+    
     const provider = this.getMetaMaskProvider();
-    if (!provider) return null;
-    return new BrowserProvider(provider);
+    if (provider) {
+        return new BrowserProvider(provider);
+    }
+    
+    return null;
   }
 
   public async getSigner(address?: string) {
@@ -213,58 +225,80 @@ export class WalletService {
     }
   }
 
-  public async connectWallet() {
-    console.log('WalletService: connectWallet called');
+  public async connectWallet(type: 'metamask' | 'walletconnect') {
+    console.log(`WalletService: connectWallet called with type: ${type}`);
+    // Clear disconnected flag when user connects
+    localStorage.removeItem('wallet_disconnected');
     this.isConnecting.set(true);
     this.error.set(null);
     
-    const metaMaskProvider = this.getMetaMaskProvider();
+    if (type === 'metamask') {
+        const metaMaskProvider = this.getMetaMaskProvider();
 
-    if (metaMaskProvider) {
-      try {
-        console.log('WalletService: Requesting permissions...');
-        await metaMaskProvider.request({
-          method: "wallet_requestPermissions",
-          params: [{ eth_accounts: {} }]
-        });
+        if (metaMaskProvider) {
+          try {
+            console.log('WalletService: Requesting permissions...');
+            await metaMaskProvider.request({
+              method: "wallet_requestPermissions",
+              params: [{ eth_accounts: {} }]
+            });
 
-        console.log('WalletService: Checking network...');
-        await this.addOrSwitchNetwork(metaMaskProvider);
-        
-        const provider = new BrowserProvider(metaMaskProvider);
-        console.log('WalletService: Requesting accounts...');
-        const accounts = await provider.send("eth_requestAccounts", []);
-        
-        console.log('WalletService: Connected accounts:', accounts);
-        
-        if (accounts && accounts.length > 0) {
-           this.accounts.set(accounts);
-           
-           // Upon explicit connect, usually the user wants to use the first account or the one they just selected
-           // But here we can just update the list. The signer part below was taking the first account implicitly.
-           
-           // We can't easily get 'signer' for a specific account from BrowserProvider unless we pass the index or address?
-           // Actually getSigner() without args gets the first one.
-           // Let's use the first one as default active.
-           console.log('WalletService: Setting active account to:', accounts[0]);
-           this.currentAccount.set(accounts[0]);
-           await this.fetchBalances(accounts[0]);
-        }
+            console.log('WalletService: Checking network...');
+            await this.addOrSwitchNetwork(metaMaskProvider);
+            
+            const provider = new BrowserProvider(metaMaskProvider);
+            console.log('WalletService: Requesting accounts...');
+            const accounts = await provider.send("eth_requestAccounts", []);
+            
+            console.log('WalletService: Connected accounts:', accounts);
+            
+            if (accounts && accounts.length > 0) {
+               this.accounts.set(accounts);
+               this.activeProviderType.set('metamask');
+               
+               console.log('WalletService: Setting active account to:', accounts[0]);
+               this.currentAccount.set(accounts[0]);
+               await this.fetchBalances(accounts[0]);
+            }
 
-      } catch (err: any) {
-        console.error('Error connecting wallet:', err);
-        if (err.code === 4001) {
-            this.error.set('User rejected the connection request');
+          } catch (err: any) {
+            console.error('Error connecting wallet:', err);
+            if (err.code === 4001) {
+                this.error.set('User rejected the connection request');
+            } else {
+                this.error.set(err.message || 'Failed to connect wallet');
+            }
+          } finally {
+            this.isConnecting.set(false);
+          }
         } else {
-            this.error.set(err.message || 'Failed to connect wallet');
+          console.warn('WalletService: MetaMask not installed');
+          this.error.set('MetaMask is not installed');
+          this.isConnecting.set(false);
         }
-      } finally {
-        this.isConnecting.set(false);
-      }
-    } else {
-      console.warn('WalletService: MetaMask not installed');
-      this.error.set('MetaMask is not installed');
-      this.isConnecting.set(false);
+    } else if (type === 'walletconnect') {
+        try {
+            const wcProvider = await this.getWalletConnectProvider();
+            console.log('WalletService: Enabling WalletConnect...');
+            await wcProvider.enable();
+            
+            this.activeProviderType.set('walletconnect');
+            
+            // Accounts are handled by the listener in getWalletConnectProvider, 
+            // but we can also get them immediately if needed.
+            if (wcProvider.accounts && wcProvider.accounts.length > 0) {
+                const accounts = wcProvider.accounts;
+                this.accounts.set(accounts);
+                this.currentAccount.set(accounts[0]);
+                await this.fetchBalances(accounts[0]);
+            }
+            
+        } catch (err: any) {
+            console.error('Error connecting WalletConnect:', err);
+            this.error.set(err.message || 'Failed to connect WalletConnect');
+        } finally {
+            this.isConnecting.set(false);
+        }
     }
   }
 
@@ -339,6 +373,15 @@ export class WalletService {
 
   public disconnectWallet() {
     console.log('WalletService: Disconnecting wallet...');
+    
+    // Store disconnected state in localStorage
+    localStorage.setItem('wallet_disconnected', 'true');
+    
+    if (this.activeProviderType() === 'walletconnect' && this.walletConnectProvider) {
+        this.walletConnectProvider.disconnect();
+    }
+    
+    this.activeProviderType.set(null);
     this.currentAccount.set(null);
     this.accounts.set([]);
     this.resetBalances();

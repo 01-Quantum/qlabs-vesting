@@ -154,8 +154,13 @@
         </div>
       } @else {
         <div class="connect-view">
-          <button (click)="walletService.connectWallet()" class="btn btn-connect" [disabled]="walletService.isConnecting()">
-            {{ walletService.isConnecting() ? 'Connecting...' : 'Connect to MetaMask' }}
+          <button (click)="walletService.connectWallet('metamask')" class="btn btn-connect" [disabled]="walletService.isConnecting()">
+            <img src="metamask.png" alt="MetaMask" class="wallet-icon">
+            <span>{{ walletService.isConnecting() ? 'Connecting...' : 'Connect to MetaMask' }}</span>
+          </button>
+          <button (click)="walletService.connectWallet('walletconnect')" class="btn btn-connect" [disabled]="walletService.isConnecting()">
+            <img src="walletconnect.svg" alt="WalletConnect" class="wallet-icon">
+            <span>{{ walletService.isConnecting() ? 'Connecting...' : 'WalletConnect' }}</span>
           </button>
           @if (walletService.error()) {
             <p class="error-message">{{ walletService.error() }}</p>
