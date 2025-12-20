@@ -414,10 +414,13 @@ export class WalletService {
     // Store disconnected state in localStorage
     localStorage.setItem('wallet_disconnected', 'true');
     
-    // Always clean up WalletConnect provider if it exists
+    // Always clean up WalletConnect provider if it exists and send proper disconnect message
     if (this.walletConnectProvider) {
         try {
-          await this.walletConnectProvider.disconnect();
+          console.log('WalletService: Revoking WalletConnect session and sending disconnect message...');    
+          // Disconnect sends the proper sign-off message to the wallet and revokes the session
+          await this.walletConnectProvider.disconnect();       
+          console.log('WalletService: WalletConnect session revoked and disconnect message sent successfully');
         } catch (err) {
           console.error('Error disconnecting WalletConnect:', err);
         }
