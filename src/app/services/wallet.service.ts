@@ -49,8 +49,27 @@ export class WalletService {
         projectId: environment.walletConnectProjectId,
         chains: [Number(environment.networkDetails.chainId)],
         showQrModal: true,
+        qrModalOptions: {
+          themeMode: 'dark'
+        },
         rpcMap: {
           [Number(environment.networkDetails.chainId)]: environment.networkDetails.rpcUrls[0]
+        }
+      });
+      
+      this.walletConnectProvider.on('display_uri', (uri: string) => {
+        console.log('WalletService: WalletConnect QR URI:', uri);
+      });
+      
+      this.walletConnectProvider.on('connect', (info: any) => {
+        console.log('WalletService: WalletConnect connect event:', info);
+        // Connection established, set provider type
+        if (this.walletConnectProvider?.accounts?.length > 0) {
+          this.activeProviderType.set('walletconnect');
+          const accounts = this.walletConnectProvider.accounts;
+          this.accounts.set(accounts);
+          this.currentAccount.set(accounts[0]);
+          this.fetchBalances(accounts[0]);
         }
       });
       
@@ -75,6 +94,10 @@ export class WalletService {
         console.log('WalletService: WalletConnect disconnected');
         this.currentAccount.set(null);
         this.resetBalances();
+      });
+      
+      this.walletConnectProvider.on('session_event', (event: any) => {
+        console.log('WalletService: WalletConnect session event:', event);
       });
     }
     return this.walletConnectProvider;
@@ -227,8 +250,6 @@ export class WalletService {
 
   public async connectWallet(type: 'metamask' | 'walletconnect') {
     console.log(`WalletService: connectWallet called with type: ${type}`);
-    // Clear disconnected flag when user connects
-    localStorage.removeItem('wallet_disconnected');
     this.isConnecting.set(true);
     this.error.set(null);
     
@@ -259,6 +280,9 @@ export class WalletService {
                console.log('WalletService: Setting active account to:', accounts[0]);
                this.currentAccount.set(accounts[0]);
                await this.fetchBalances(accounts[0]);
+               
+               // Only clear disconnected flag after successful connection
+               localStorage.removeItem('wallet_disconnected');
             }
 
           } catch (err: any) {
@@ -268,6 +292,8 @@ export class WalletService {
             } else {
                 this.error.set(err.message || 'Failed to connect wallet');
             }
+            // Restore disconnected flag if connection failed
+            localStorage.setItem('wallet_disconnected', 'true');
           } finally {
             this.isConnecting.set(false);
           }
@@ -280,23 +306,34 @@ export class WalletService {
         try {
             const wcProvider = await this.getWalletConnectProvider();
             console.log('WalletService: Enabling WalletConnect...');
-            await wcProvider.enable();
+            const accounts = await wcProvider.enable();
+            console.log('WalletService: WalletConnect enabled with accounts:', accounts);
             
-            this.activeProviderType.set('walletconnect');
-            
-            // Accounts are handled by the listener in getWalletConnectProvider, 
-            // but we can also get them immediately if needed.
-            if (wcProvider.accounts && wcProvider.accounts.length > 0) {
-                const accounts = wcProvider.accounts;
+            // Set accounts immediately after enable() returns them
+            if (accounts && accounts.length > 0) {
+                this.activeProviderType.set('walletconnect');
                 this.accounts.set(accounts);
                 this.currentAccount.set(accounts[0]);
+                console.log('WalletService: Account state updated, fetching balances...');
                 await this.fetchBalances(accounts[0]);
+                console.log('WalletService: Balances fetched, connection complete');
+                
+                // Only clear disconnected flag after successful connection
+                localStorage.removeItem('wallet_disconnected');
+            } else {
+                console.warn('WalletService: No accounts returned from WalletConnect enable()');
+                this.error.set('No accounts found');
+                // Restore disconnected flag if connection failed
+                localStorage.setItem('wallet_disconnected', 'true');
             }
             
         } catch (err: any) {
             console.error('Error connecting WalletConnect:', err);
             this.error.set(err.message || 'Failed to connect WalletConnect');
+            // Restore disconnected flag if connection failed or was cancelled
+            localStorage.setItem('wallet_disconnected', 'true');
         } finally {
+            console.log('WalletService: Setting isConnecting to false');
             this.isConnecting.set(false);
         }
     }
@@ -371,14 +408,21 @@ export class WalletService {
     }
   }
 
-  public disconnectWallet() {
+  public async disconnectWallet() {
     console.log('WalletService: Disconnecting wallet...');
     
     // Store disconnected state in localStorage
     localStorage.setItem('wallet_disconnected', 'true');
     
-    if (this.activeProviderType() === 'walletconnect' && this.walletConnectProvider) {
-        this.walletConnectProvider.disconnect();
+    // Always clean up WalletConnect provider if it exists
+    if (this.walletConnectProvider) {
+        try {
+          await this.walletConnectProvider.disconnect();
+        } catch (err) {
+          console.error('Error disconnecting WalletConnect:', err);
+        }
+        // Reset the provider instance so it can be reinitialized with QR code on next connect
+        this.walletConnectProvider = null;
     }
     
     this.activeProviderType.set(null);
