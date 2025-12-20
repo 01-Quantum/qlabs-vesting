@@ -1,5 +1,6 @@
 import { Injectable, signal, WritableSignal } from '@angular/core';
 import { BrowserProvider, Contract, formatEther, JsonRpcProvider } from 'ethers';
+import { EthereumProvider } from '@walletconnect/ethereum-provider';
 import { environment } from '../../environments/environment';
 
 const ERC20_ABI = [
@@ -28,10 +29,50 @@ export class WalletService {
   public error: WritableSignal<string | null> = signal(null);
   public hypeBalance: WritableSignal<string | null> = signal(null);
   public qoneBalance: WritableSignal<string | null> = signal(null);
+  
+  private walletConnectProvider: any | null = null;
 
   constructor() {
     this.checkIfWalletIsConnected();
     this.listenForAccountChanges();
+  }
+
+  public async getWalletConnectProvider() {
+    if (!this.walletConnectProvider) {
+      console.log('WalletService: Initializing WalletConnect provider...');
+      this.walletConnectProvider = await EthereumProvider.init({
+        projectId: environment.walletConnectProjectId,
+        chains: [Number(environment.networkDetails.chainId)],
+        showQrModal: true,
+        rpcMap: {
+          [Number(environment.networkDetails.chainId)]: environment.networkDetails.rpcUrls[0]
+        }
+      });
+      
+      this.walletConnectProvider.on('accountsChanged', (accounts: string[]) => {
+        console.log('WalletService: WalletConnect accountsChanged:', accounts);
+        this.accounts.set(accounts);
+        if (accounts.length > 0) {
+           this.currentAccount.set(accounts[0]);
+           this.fetchBalances(accounts[0]);
+        } else {
+          this.currentAccount.set(null);
+          this.resetBalances();
+        }
+      });
+      
+      this.walletConnectProvider.on('chainChanged', (chainId: any) => {
+        console.log('WalletService: WalletConnect chainChanged:', chainId);
+        // Handle chain change if needed
+      });
+      
+      this.walletConnectProvider.on('disconnect', () => {
+        console.log('WalletService: WalletConnect disconnected');
+        this.currentAccount.set(null);
+        this.resetBalances();
+      });
+    }
+    return this.walletConnectProvider;
   }
 
   public getBrowserProvider(): BrowserProvider | null {
