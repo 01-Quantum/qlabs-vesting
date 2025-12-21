@@ -167,7 +167,49 @@ export class WalletService {
     const target = address || this.currentAccount();
     this.log('getSigner: target =', target);
 
+    // Validate and switch network before returning signer
+    await this.validateAndSwitchNetwork();
+
     return target ? provider.getSigner(target) : provider.getSigner();
+  }
+
+  /**
+   * Validates the current network and attempts to switch if incorrect.
+   * Called automatically before getting a signer.
+   */
+  private async validateAndSwitchNetwork(): Promise<void> {
+    this.log('validateAndSwitchNetwork: begin');
+    const provider = this.getActiveEip1193Provider();
+    const type = this.activeProviderType();
+
+    if (!provider || !type) {
+      this.warn('validateAndSwitchNetwork: no active provider');
+      throw new Error('No wallet connected');
+    }
+
+    try {
+      const expected = Number(environment.networkDetails.chainId);
+      const current = Number(provider?.chainId ?? await provider?.request?.({ method: 'eth_chainId' }));
+      this.log('validateAndSwitchNetwork: chain check', { current, expected });
+
+      if (current !== expected) {
+        this.log('validateAndSwitchNetwork: wrong network, attempting to switch...');
+        await this.addOrSwitchNetwork(provider);
+        
+        // Verify the switch was successful
+        const newChainId = Number(provider?.chainId ?? await provider?.request?.({ method: 'eth_chainId' }));
+        if (newChainId !== expected) {
+          throw new Error(`Please switch to ${environment.networkDetails.chainName} in your wallet`);
+        }
+        
+        this.log('validateAndSwitchNetwork: successfully switched to correct network');
+      } else {
+        this.log('validateAndSwitchNetwork: already on correct network');
+      }
+    } catch (e: any) {
+      this.err('validateAndSwitchNetwork: error:', e);
+      throw new Error(e?.message || `Please switch to ${environment.networkDetails.chainName}`);
+    }
   }
 
   // ----------------------------
