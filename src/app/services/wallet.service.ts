@@ -1,12 +1,19 @@
+// wallet.service.ts
 import { Injectable, signal, WritableSignal } from '@angular/core';
-import { BrowserProvider, Contract, formatEther, JsonRpcProvider } from 'ethers';
+import {
+  BrowserProvider,
+  Contract,
+  JsonRpcProvider,
+  formatEther,
+  formatUnits,
+} from 'ethers';
 import { EthereumProvider } from '@walletconnect/ethereum-provider';
 import { environment } from '../../environments/environment';
 
 const ERC20_ABI = [
   'function balanceOf(address owner) view returns (uint256)',
   'function decimals() view returns (uint8)',
-  'function symbol() view returns (string)'
+  'function symbol() view returns (string)',
 ];
 
 interface EIP6963ProviderDetail {
@@ -14,454 +21,625 @@ interface EIP6963ProviderDetail {
     uuid: string;
     name: string;
     icon: string;
-    rdns: string; // MetaMask's reverse DNS is "io.metamask"
+    rdns: string;
   };
   provider: any;
 }
 
-@Injectable({
-  providedIn: 'root'
-})
+type ProviderType = 'metamask' | 'walletconnect';
+
+
+@Injectable({ providedIn: 'root' })
 export class WalletService {
   public currentAccount: WritableSignal<string | null> = signal(null);
   public accounts: WritableSignal<string[]> = signal([]);
   public isConnecting: WritableSignal<boolean> = signal(false);
   public error: WritableSignal<string | null> = signal(null);
+
   public hypeBalance: WritableSignal<string | null> = signal(null);
   public qoneBalance: WritableSignal<string | null> = signal(null);
-  public activeProviderType: WritableSignal<'metamask' | 'walletconnect' | null> = signal(null);
-  
-  private walletConnectProvider: any | null = null;
 
-  constructor() {
-    // Only auto-connect if user hasn't explicitly disconnected
-    const hasDisconnected = localStorage.getItem('wallet_disconnected');
-    if (!hasDisconnected) {
-      this.checkIfWalletIsConnected();
-    }
-    this.listenForAccountChanges();
+  public activeProviderType: WritableSignal<ProviderType | null> = signal(null);
+
+  private walletConnectProvider: any | null = null;
+  private metaMaskProvider: any | null = null;
+
+  private readonly ACTIVE_PROVIDER_KEY = 'active_provider';
+
+  // Read-only provider for balance reads (fast + stable)
+  private readonly rpcProvider = new JsonRpcProvider(environment.networkDetails.rpcUrls[0]);
+
+  // Guards
+  private isMetaMaskListenerSet = false;
+  private wcConnectInFlight: Promise<void> | null = null;
+
+  // ---- Logging helpers ----
+  private log(...args: any[]) {
+    console.log(`[WalletService ${new Date().toISOString()}]`, ...args);
+  }
+  private warn(...args: any[]) {
+    console.warn(`[WalletService ${new Date().toISOString()}]`, ...args);
+  }
+  private err(...args: any[]) {
+    console.error(`[WalletService ${new Date().toISOString()}]`, ...args);
   }
 
-  public async getWalletConnectProvider() {
-    if (!this.walletConnectProvider) {
-      console.log('WalletService: Initializing WalletConnect provider...');
-      this.walletConnectProvider = await EthereumProvider.init({
-        projectId: environment.walletConnectProjectId,
-        chains: [Number(environment.networkDetails.chainId)],
-        showQrModal: true,
-        qrModalOptions: {
-          themeMode: 'dark'
-        },
-        rpcMap: {
-          [Number(environment.networkDetails.chainId)]: environment.networkDetails.rpcUrls[0]
-        }
-      });
-      
-      this.walletConnectProvider.on('display_uri', (uri: string) => {
-        console.log('WalletService: WalletConnect QR URI:', uri);
-      });
-      
-      this.walletConnectProvider.on('connect', async (info: any) => {
-        console.log('WalletService: WalletConnect connect event:', info);
-        // Connection established, check network first
-        try {
-          console.log('WalletService: Checking network...');
-          await this.addOrSwitchNetwork(this.walletConnectProvider);
-        } catch (err) {
-          console.error('WalletService: Failed to switch network:', err);
-        }
-        
-        // Set provider type and accounts
-        if (this.walletConnectProvider?.accounts?.length > 0) {
-          this.activeProviderType.set('walletconnect');
-          const accounts = this.walletConnectProvider.accounts;
-          this.accounts.set(accounts);
-          this.currentAccount.set(accounts[0]);
-          this.fetchBalances(accounts[0]);
-        }
-      });
-      
-      this.walletConnectProvider.on('accountsChanged', (accounts: string[]) => {
-        console.log('WalletService: WalletConnect accountsChanged:', accounts);
-        this.accounts.set(accounts);
-        if (accounts.length > 0) {
-           this.currentAccount.set(accounts[0]);
-           this.fetchBalances(accounts[0]);
-        } else {
-          this.currentAccount.set(null);
-          this.resetBalances();
-        }
-      });
-      
-      this.walletConnectProvider.on('chainChanged', (chainId: any) => {
-        console.log('WalletService: WalletConnect chainChanged:', chainId);
-        // Handle chain change if needed
-      });
-      
-      this.walletConnectProvider.on('disconnect', () => {
-        console.log('WalletService: WalletConnect disconnected');
-        this.currentAccount.set(null);
-        this.resetBalances();
-      });
-      
-      this.walletConnectProvider.on('session_event', (event: any) => {
-        console.log('WalletService: WalletConnect session event:', event);
-      });
+  constructor() {
+    const savedProvider = localStorage.getItem(this.ACTIVE_PROVIDER_KEY) as ProviderType | null;
+    this.log('Constructor: savedProvider =', savedProvider);
+
+    if (savedProvider) {
+      this.activeProviderType.set(savedProvider);
+
+      // Boot-time rehydrate (no QR should appear here)
+      if (savedProvider === 'metamask') {
+        void this.rehydrateMetaMask();
+      } else if (savedProvider === 'walletconnect') {
+        void this.initWalletConnect(); // restore-only
+      }
     }
-    return this.walletConnectProvider;
+  }
+
+  // ----------------------------
+  // Provider resolution
+  // ----------------------------
+
+  private getMetaMaskProvider(): any | null {
+    if (typeof window === 'undefined') return null;
+
+    if (this.metaMaskProvider) {
+      this.log('getMetaMaskProvider: using cached MetaMask provider');
+      return this.metaMaskProvider;
+    }
+
+    const eth = (window as any).ethereum;
+    if (!eth) {
+      this.warn('getMetaMaskProvider: window.ethereum not found');
+      this.tryEip6963Discovery();
+      return null;
+    }
+
+    // Multiple injected providers case
+    if (eth.providers?.length) {
+      const mm = eth.providers.find((p: any) => p.isMetaMask);
+      if (mm) {
+        this.metaMaskProvider = mm;
+        this.log('getMetaMaskProvider: found MetaMask in ethereum.providers[]');
+        return mm;
+      }
+    }
+
+    if (eth.isMetaMask) {
+      this.metaMaskProvider = eth;
+      this.log('getMetaMaskProvider: window.ethereum is MetaMask');
+      return eth;
+    }
+
+    this.warn('getMetaMaskProvider: MetaMask not detected via legacy paths; trying EIP-6963');
+    this.tryEip6963Discovery();
+    return null;
+  }
+
+  private tryEip6963Discovery() {
+    if (typeof window === 'undefined') return;
+
+    const onAnnounce = (event: any) => {
+      const detail: EIP6963ProviderDetail = event.detail;
+      this.log('EIP-6963 announceProvider:', detail?.info?.rdns, detail?.info?.name);
+
+      if (detail?.info?.rdns === 'io.metamask') {
+        this.metaMaskProvider = detail.provider;
+        this.log('EIP-6963: cached MetaMask provider from announcement');
+      }
+    };
+
+    window.addEventListener('eip6963:announceProvider', onAnnounce);
+    window.dispatchEvent(new Event('eip6963:requestProvider'));
+
+    setTimeout(() => {
+      window.removeEventListener('eip6963:announceProvider', onAnnounce);
+      this.log('EIP-6963: discovery listener removed');
+    }, 1500);
+  }
+
+  private getActiveEip1193Provider(): any | null {
+    const type = this.activeProviderType();
+    this.log('getActiveEip1193Provider: activeProviderType =', type);
+
+    if (type === 'walletconnect') return this.walletConnectProvider;
+    if (type === 'metamask') return this.getMetaMaskProvider();
+
+    // Not set: best-effort MetaMask detection (no auto-connect)
+    return this.getMetaMaskProvider();
   }
 
   public getBrowserProvider(): BrowserProvider | null {
-    if (this.activeProviderType() === 'walletconnect' && this.walletConnectProvider) {
-        return new BrowserProvider(this.walletConnectProvider);
-    }
-    
-    const provider = this.getMetaMaskProvider();
-    if (provider) {
-        return new BrowserProvider(provider);
-    }
-    
-    return null;
+    const p = this.getActiveEip1193Provider();
+    if (!p) return null;
+    return new BrowserProvider(p);
   }
 
   public async getSigner(address?: string) {
     const provider = this.getBrowserProvider();
     if (!provider) throw new Error('No provider available');
-    
-    // If address is provided, try to get signer for that specific address
-    // Otherwise use current account or default
-    const targetAddress = address || this.currentAccount();
-    if (targetAddress) {
-      return await provider.getSigner(targetAddress);
+
+    const target = address || this.currentAccount();
+    this.log('getSigner: target =', target);
+
+    return target ? provider.getSigner(target) : provider.getSigner();
+  }
+
+  // ----------------------------
+  // WalletConnect
+  // ----------------------------
+
+  /**
+   * Restore-only init:
+   * - initializes provider + listeners
+   * - restores accounts if a session already exists
+   * - DOES NOT call connect() => no QR on reload
+   */
+  public async initWalletConnect(): Promise<boolean> {
+    this.log('initWalletConnect: begin');
+
+    if (!this.walletConnectProvider) {
+      this.log('initWalletConnect: creating EthereumProvider.init(...)');
+      this.walletConnectProvider = await EthereumProvider.init({
+        projectId: environment.walletConnectProjectId,
+        chains: [Number(environment.networkDetails.chainId)],
+        showQrModal: true, // QR shows only when connect() is called
+        qrModalOptions: { themeMode: 'dark' },
+        rpcMap: {
+          [Number(environment.networkDetails.chainId)]: environment.networkDetails.rpcUrls[0],
+        },
+      });
+
+      // ---- Listeners ----
+
+      this.walletConnectProvider.on('display_uri', (uri: string) => {
+        this.log('WalletConnect display_uri:', uri);
+      });
+
+      // LOG ONLY: do not set session / switch network here (avoids race + black modal)
+      this.walletConnectProvider.on('connect', (info: any) => {
+        this.log('WalletConnect connect event:', info);
+        this.log('WalletConnect session now:', this.walletConnectProvider?.session);
+        this.log('WalletConnect accounts now:', this.walletConnectProvider?.accounts);
+      });
+
+      // Keep state synced. Also close modal if it stayed open.
+      this.walletConnectProvider.on('accountsChanged', (accounts: string[]) => {
+        this.log('WalletConnect accountsChanged:', accounts);
+
+        if (accounts?.length > 0) {
+          const modal = (this.walletConnectProvider as any)?.modal;
+          if (modal?.closeModal) {
+            this.log('WalletConnect modal: closing (accountsChanged)');
+            modal.closeModal();
+          }
+        }
+
+        void this.handleAccountsChanged(accounts);
+      });
+
+      this.walletConnectProvider.on('chainChanged', (chainId: any) => {
+        this.log('WalletConnect chainChanged:', chainId);
+      });
+
+      this.walletConnectProvider.on('disconnect', (reason: any) => {
+        this.warn('WalletConnect disconnect event:', reason);
+        void this.handleAccountsChanged([]);
+      });
+
+      this.log('initWalletConnect: listeners attached');
     } else {
-      return await provider.getSigner();
-    }
-  }
-
-  private getMetaMaskProvider(): any | null {
-    // 1. Fallback for older environments or when EIP-6963 is missed
-    if (typeof window === 'undefined') return null;
-
-    let provider = null;
-
-    // 2. Modern Discovery: Listen for EIP-6963 announcements
-    const onAnnounce = (event: any) => {
-      const detail: EIP6963ProviderDetail = event.detail;
-      if (detail.info.rdns === "io.metamask") {
-        provider = detail.provider;
-      }
-    };
-
-    window.addEventListener("eip6963:announceProvider", onAnnounce);
-    
-    // Trigger discovery
-    window.dispatchEvent(new Event("eip6963:requestProvider"));
-    
-    // Cleanup listener to prevent memory leaks since we only care about the synchronous result (or immediate response)
-    window.removeEventListener("eip6963:announceProvider", onAnnounce);
-
-    // 3. Legacy Fallback (Your original logic, as a backup)
-    if (!provider && (window as any).ethereum) {
-      const eth = (window as any).ethereum;
-      if (eth.providers) {
-        provider = eth.providers.find((p: any) => p.isMetaMask);
-      } else if (eth.isMetaMask) {
-        provider = eth;
-      }
+      this.log('initWalletConnect: provider already exists');
     }
 
-    return provider;
+    // Attempt restore
+    const accounts = this.walletConnectProvider.accounts ?? [];
+    const hasSession = !!this.walletConnectProvider?.session;
+    this.log('initWalletConnect: restored', { hasSession, accounts });
+
+    if (accounts.length > 0) {
+      await this.setActiveSession('walletconnect', accounts);
+      return true;
+    }
+    return false;
   }
 
-  private async checkIfWalletIsConnected() {
-    console.log('WalletService: Checking if wallet is connected...');
-    const provider = this.getMetaMaskProvider();
-    if (provider) {
-      try {
-        const browserProvider = new BrowserProvider(provider);
-        const accounts = await browserProvider.listAccounts();
-        console.log('WalletService: Found accounts:', accounts.map(a => a.address));
-        
+  /**
+   * User-action connect:
+   * - shows QR via connect()
+   * - session is owned by THIS function only
+   */
+  public async connectWalletConnect() {
+    this.log('connectWalletConnect: begin');
+
+    if (this.wcConnectInFlight) {
+      this.warn('connectWalletConnect: already in flight, returning existing promise');
+      return this.wcConnectInFlight;
+    }
+
+    this.wcConnectInFlight = (async () => {
+      if (!this.walletConnectProvider) {
+        this.log('connectWalletConnect: provider missing, calling initWalletConnect()');
+        await this.initWalletConnect();
+      }
+
+      // IMPORTANT: session can exist even when accounts are briefly empty during async rehydrate
+      const hasSession = !!this.walletConnectProvider?.session;
+      const accounts = this.walletConnectProvider?.accounts ?? [];
+
+      this.log('connectWalletConnect: pre-check', { hasSession, accounts });
+
+      if (hasSession || accounts.length > 0) {
+        this.log('connectWalletConnect: already connected/restored, skipping connect()');
         if (accounts.length > 0) {
-          const addresses = accounts.map(a => a.address);
-          this.accounts.set(addresses);
-          
-          // If currentAccount is not set or not in the list, set it to the first one
-          const current = this.currentAccount();
-          if (!current || !addresses.includes(current)) {
-             console.log('WalletService: Auto-selecting first account:', addresses[0]);
-             this.currentAccount.set(addresses[0]);
-             this.fetchBalances(addresses[0]);
+          await this.setActiveSession('walletconnect', accounts);
+        }
+        // Close modal if it appears in a weird state
+        const modal = (this.walletConnectProvider as any)?.modal;
+        if (modal?.closeModal) {
+          this.log('WalletConnect modal: closing (pre-check)');
+          modal.closeModal();
+        }
+        return;
+      }
+
+      try {
+        this.log('connectWalletConnect: calling provider.connect() => QR may appear');
+        await this.walletConnectProvider.connect();
+
+        const newAccounts = this.walletConnectProvider?.accounts ?? [];
+        this.log('connectWalletConnect: post-connect accounts =', newAccounts);
+
+        if (newAccounts.length > 0) {
+          await this.setActiveSession('walletconnect', newAccounts);
+
+          // Close QR modal if it stayed open / reopened as black
+          const modal = (this.walletConnectProvider as any)?.modal;
+          this.log('WalletConnect modal object:', modal);
+
+          if (modal?.closeModal) {
+            this.log('WalletConnect modal: closing');
+            modal.closeModal();
           } else {
-             console.log('WalletService: Maintaining current account:', current);
-             this.fetchBalances(current);
+            this.warn('WalletConnect modal: closeModal() not available');
           }
         } else {
-          console.log('WalletService: No accounts found connected');
+          this.warn('connectWalletConnect: connect() finished but accounts still empty');
         }
-      } catch (err) {
-        console.error('Error checking wallet connection:', err);
+      } catch (e: any) {
+        this.err('connectWalletConnect: error:', e);
+
+        // Treat these as cancel/close/reset: DO NOT retry
+        const msg = String(e?.message ?? '');
+        const code = e?.code;
+        const cancelled =
+          code === 4001 ||
+          /reset/i.test(msg) ||
+          /rejected/i.test(msg) ||
+          /closed/i.test(msg) ||
+          /canceled|cancelled/i.test(msg);
+
+        if (cancelled) {
+          this.warn('connectWalletConnect: cancelled/reset/closed => not retrying');
+          return;
+        }
+
+        throw e;
       }
-    } else {
-      console.log('WalletService: No provider found');
+    })().finally(() => {
+      this.wcConnectInFlight = null;
+      this.log('connectWalletConnect: end (inFlight cleared)');
+    });
+
+    return this.wcConnectInFlight;
+  }
+
+  public async getWalletConnectProvider() {
+    if (!this.walletConnectProvider) await this.initWalletConnect();
+    return this.walletConnectProvider;
+  }
+
+  // ----------------------------
+  // MetaMask
+  // ----------------------------
+
+  private async rehydrateMetaMask() {
+    this.log('rehydrateMetaMask: begin');
+    const provider = this.getMetaMaskProvider();
+
+    if (!provider) {
+      this.warn('rehydrateMetaMask: MetaMask provider not found');
+      return;
+    }
+
+    this.listenForMetaMaskAccountChanges();
+
+    try {
+      const browserProvider = new BrowserProvider(provider);
+      const accounts = await browserProvider.listAccounts();
+      const addresses = accounts.map((a) => a.address);
+      this.log('rehydrateMetaMask: listAccounts =', addresses);
+
+      if (addresses.length > 0) {
+        await this.setActiveSession('metamask', addresses);
+      } else {
+        this.log('rehydrateMetaMask: no connected accounts');
+      }
+    } catch (e) {
+      this.err('rehydrateMetaMask: error:', e);
     }
   }
 
-  private listenForAccountChanges() {
+  private listenForMetaMaskAccountChanges() {
+    if (this.isMetaMaskListenerSet) {
+      this.log('listenForMetaMaskAccountChanges: already set');
+      return;
+    }
+
     const provider = this.getMetaMaskProvider();
-    if (provider) {
-      provider.on('accountsChanged', (accounts: string[]) => {
-        console.log('WalletService: accountsChanged event:', accounts);
-        this.accounts.set(accounts);
-        if (accounts.length > 0) {
-           // If currentAccount is not in the new list, switch to the first one
-           const current = this.currentAccount();
-           if (!current || !accounts.includes(current)) {
-             console.log('WalletService: Switching to new primary account:', accounts[0]);
-             this.currentAccount.set(accounts[0]);
-             this.fetchBalances(accounts[0]);
-           } else {
-             console.log('WalletService: Current account still valid:', current);
-           }
-        } else {
-          console.log('WalletService: All accounts disconnected');
-          this.currentAccount.set(null);
-          this.resetBalances();
-        }
-      });
+    if (!provider) {
+      this.warn('listenForMetaMaskAccountChanges: provider missing');
+      return;
+    }
+
+    provider.on('accountsChanged', (accounts: string[]) => {
+      this.log('MetaMask accountsChanged:', accounts);
+      void this.handleAccountsChanged(accounts);
+    });
+
+    provider.on('chainChanged', (chainId: string) => {
+      this.log('MetaMask chainChanged:', chainId);
+    });
+
+    this.isMetaMaskListenerSet = true;
+    this.log('listenForMetaMaskAccountChanges: listener attached');
+  }
+
+  // ----------------------------
+  // Connect entry point
+  // ----------------------------
+
+  public async connectWallet(type: ProviderType) {
+    this.log('connectWallet:', { type });
+    this.isConnecting.set(true);
+    this.error.set(null);
+
+    try {
+      if (type === 'metamask') {
+        const mm = this.getMetaMaskProvider();
+        if (!mm) throw new Error('MetaMask is not installed or not detected');
+
+        this.listenForMetaMaskAccountChanges();
+
+        this.log('MetaMask: wallet_requestPermissions...');
+        await mm.request({
+          method: 'wallet_requestPermissions',
+          params: [{ eth_accounts: {} }],
+        });
+
+        this.log('MetaMask: addOrSwitchNetwork...');
+        await this.addOrSwitchNetwork(mm);
+
+        const browserProvider = new BrowserProvider(mm);
+        this.log('MetaMask: eth_requestAccounts...');
+        const accounts = await browserProvider.send('eth_requestAccounts', []);
+        this.log('MetaMask: connected accounts:', accounts);
+
+        await this.setActiveSession('metamask', accounts);
+      }
+
+      if (type === 'walletconnect') {
+        await this.connectWalletConnect();
+      }
+    } catch (e: any) {
+      this.err('connectWallet: error:', e);
+
+      if (e?.code === 4001) {
+        this.error.set('User rejected the connection request');
+      } else {
+        this.error.set(e?.message || `Failed to connect ${type}`);
+      }
+
+      localStorage.removeItem(this.ACTIVE_PROVIDER_KEY);
+      this.activeProviderType.set(null);
+    } finally {
+      this.isConnecting.set(false);
+      this.log('connectWallet: done, isConnecting=false');
     }
   }
+
+  // ----------------------------
+  // Session + account handling
+  // ----------------------------
+
+  private async setActiveSession(type: ProviderType, accounts: string[]) {
+    this.log('setActiveSession:', { type, accounts });
+
+    if (accounts?.length > 0) {
+      this.activeProviderType.set(type);
+      localStorage.setItem(this.ACTIVE_PROVIDER_KEY, type);
+      await this.handleAccountsChanged(accounts);
+    } else {
+      this.warn('setActiveSession: empty accounts; not setting session');
+    }
+  }
+
+  private async handleAccountsChanged(accounts: string[]) {
+    this.log('handleAccountsChanged:', accounts);
+
+    this.accounts.set(accounts);
+
+    if (accounts.length > 0) {
+      const current = this.currentAccount();
+      if (!current || !accounts.includes(current)) {
+        this.log('handleAccountsChanged: selecting primary account:', accounts[0]);
+        this.currentAccount.set(accounts[0]);
+        await this.fetchBalances(accounts[0]);
+      } else {
+        this.log('handleAccountsChanged: keeping current account:', current);
+        await this.fetchBalances(current);
+      }
+      return;
+    }
+
+    // Disconnected
+    this.warn('handleAccountsChanged: disconnected (0 accounts)');
+    this.activeProviderType.set(null);
+    localStorage.removeItem(this.ACTIVE_PROVIDER_KEY);
+    this.currentAccount.set(null);
+    this.resetBalances();
+  }
+
+  // ----------------------------
+  // Network helpers
+  // ----------------------------
 
   private async addOrSwitchNetwork(provider: any) {
+    this.log('addOrSwitchNetwork: target chainId =', environment.networkDetails.chainId);
+
     try {
-      // 1. Try to switch to the network first
       await provider.request({
         method: 'wallet_switchEthereumChain',
         params: [{ chainId: environment.networkDetails.chainId }],
       });
-    } catch (error: any) {
-      // 2. Error code 4902 indicates the chain has not been added to MetaMask
-      if (error.code === 4902) {
-        try {
-          await provider.request({
-            method: 'wallet_addEthereumChain',
-            params: [environment.networkDetails],
-          });
-        } catch (addError) {
-          throw new Error('User rejected adding the network');
-        }
-      } else {
-        throw new Error('Failed to switch network');
+      this.log('addOrSwitchNetwork: switched OK');
+    } catch (e: any) {
+      this.warn('addOrSwitchNetwork: switch failed:', e);
+
+      if (e?.code === 4902) {
+        this.log('addOrSwitchNetwork: chain missing, adding...');
+        await provider.request({
+          method: 'wallet_addEthereumChain',
+          params: [environment.networkDetails],
+        });
+        this.log('addOrSwitchNetwork: added OK');
+        return;
       }
+
+      throw new Error(e?.message || 'Failed to switch network');
     }
   }
 
-  public async connectWallet(type: 'metamask' | 'walletconnect') {
-    console.log(`WalletService: connectWallet called with type: ${type}`);
-    this.isConnecting.set(true);
-    this.error.set(null);
-    
-    if (type === 'metamask') {
-        const metaMaskProvider = this.getMetaMaskProvider();
-
-        if (metaMaskProvider) {
-          try {
-            console.log('WalletService: Requesting permissions...');
-            await metaMaskProvider.request({
-              method: "wallet_requestPermissions",
-              params: [{ eth_accounts: {} }]
-            });
-
-            console.log('WalletService: Checking network...');
-            await this.addOrSwitchNetwork(metaMaskProvider);
-            
-            const provider = new BrowserProvider(metaMaskProvider);
-            console.log('WalletService: Requesting accounts...');
-            const accounts = await provider.send("eth_requestAccounts", []);
-            
-            console.log('WalletService: Connected accounts:', accounts);
-            
-            if (accounts && accounts.length > 0) {
-               this.accounts.set(accounts);
-               this.activeProviderType.set('metamask');
-               
-               console.log('WalletService: Setting active account to:', accounts[0]);
-               this.currentAccount.set(accounts[0]);
-               await this.fetchBalances(accounts[0]);
-               
-               // Only clear disconnected flag after successful connection
-               localStorage.removeItem('wallet_disconnected');
-            }
-
-          } catch (err: any) {
-            console.error('Error connecting wallet:', err);
-            if (err.code === 4001) {
-                this.error.set('User rejected the connection request');
-            } else {
-                this.error.set(err.message || 'Failed to connect wallet');
-            }
-            // Restore disconnected flag if connection failed
-            localStorage.setItem('wallet_disconnected', 'true');
-          } finally {
-            this.isConnecting.set(false);
-          }
-        } else {
-          console.warn('WalletService: MetaMask not installed');
-          this.error.set('MetaMask is not installed');
-          this.isConnecting.set(false);
-        }
-    } else if (type === 'walletconnect') {
-        try {
-            const wcProvider = await this.getWalletConnectProvider();
-            console.log('WalletService: Enabling WalletConnect...');
-            const accounts = await wcProvider.enable();
-            console.log('WalletService: WalletConnect enabled with accounts:', accounts);
-            
-            // Set accounts immediately after enable() returns them
-            if (accounts && accounts.length > 0) {
-                this.activeProviderType.set('walletconnect');
-                this.accounts.set(accounts);
-                this.currentAccount.set(accounts[0]);
-                console.log('WalletService: Account state updated, fetching balances...');
-                await this.fetchBalances(accounts[0]);
-                console.log('WalletService: Balances fetched, connection complete');
-                
-                // Only clear disconnected flag after successful connection
-                localStorage.removeItem('wallet_disconnected');
-            } else {
-                console.warn('WalletService: No accounts returned from WalletConnect enable()');
-                this.error.set('No accounts found');
-                // Restore disconnected flag if connection failed
-                localStorage.setItem('wallet_disconnected', 'true');
-            }
-            
-        } catch (err: any) {
-            console.error('Error connecting WalletConnect:', err);
-            this.error.set(err.message || 'Failed to connect WalletConnect');
-            // Restore disconnected flag if connection failed or was cancelled
-            localStorage.setItem('wallet_disconnected', 'true');
-        } finally {
-            console.log('WalletService: Setting isConnecting to false');
-            this.isConnecting.set(false);
-        }
-    }
-  }
+  // ----------------------------
+  // Balances
+  // ----------------------------
 
   private async fetchBalances(address: string) {
-    console.log('WalletService: Fetching balances for:', address);
-    await Promise.all([
-      this.fetchHypeBalance(address),
-      this.fetchQoneBalance(address)
-    ]);
+    this.log('fetchBalances:', address);
+    await Promise.all([this.fetchHypeBalance(address), this.fetchQoneBalance(address)]);
   }
 
   private async fetchHypeBalance(address: string) {
-    console.log('WalletService: Fetching HYPE balance...');
+    this.log('fetchHypeBalance: begin');
     try {
-      const provider = new JsonRpcProvider(environment.networkDetails.rpcUrls[0]);
-      const balance = await provider.getBalance(address);
-      const formatted = formatEther(balance);
-      console.log('WalletService: HYPE balance fetched:', formatted);
+      const bal = await this.rpcProvider.getBalance(address);
+      const formatted = formatEther(bal);
+      this.log('fetchHypeBalance: value =', formatted);
       this.hypeBalance.set(formatted);
-    } catch (err) {
-      console.error('Error fetching HYPE balance:', err);
+    } catch (e) {
+      this.err('fetchHypeBalance: error:', e);
       this.hypeBalance.set(null);
     }
   }
 
   private async fetchQoneBalance(address: string) {
-    console.log('WalletService: Fetching QONE balance...');
+    this.log('fetchQoneBalance: begin');
     try {
-      const provider = new JsonRpcProvider(environment.networkDetails.rpcUrls[0]);
-      const contract = new Contract(environment.coinAddress, ERC20_ABI, provider);
-      
-      const [balance, decimals] = await Promise.all([
+      const contract = new Contract(environment.coinAddress, ERC20_ABI, this.rpcProvider);
+
+      const [bal, decimals] = await Promise.all([
         contract['balanceOf'](address),
-        contract['decimals']()
+        contract['decimals'](),
       ]);
 
-      const { formatUnits } = await import('ethers');
-      const formatted = formatUnits(balance, decimals);
-      console.log('WalletService: QONE balance fetched:', formatted);
+      const formatted = formatUnits(bal, decimals);
+      this.log('fetchQoneBalance: value =', formatted);
       this.qoneBalance.set(formatted);
-    } catch (err) {
-      console.error('Error fetching QONE balance:', err);
+    } catch (e) {
+      this.err('fetchQoneBalance: error:', e);
       this.qoneBalance.set(null);
     }
   }
 
+  // ----------------------------
+  // UI actions
+  // ----------------------------
+
   public async addTokenToMetaMask() {
-    console.log('WalletService: addTokenToMetaMask called');
+    this.log('addTokenToMetaMask: begin');
+
     const provider = this.getMetaMaskProvider();
-    if (provider) {
-      try {
-        await provider.request({
-          method: 'wallet_watchAsset',
-          params: {
-            type: 'ERC20',
-            options: {
-              address: environment.coinAddress,
-              symbol: 'QLABS',
-              decimals: 18,
-            },
+    if (!provider) {
+      this.warn('addTokenToMetaMask: MetaMask provider not found');
+      this.error.set('MetaMask is not installed');
+      return;
+    }
+
+    try {
+      await provider.request({
+        method: 'wallet_watchAsset',
+        params: {
+          type: 'ERC20',
+          options: {
+            address: environment.coinAddress,
+            symbol: 'QLABS',
+            decimals: 18,
           },
-        });
-        console.log('WalletService: Token added to MetaMask request sent');
-      } catch (error) {
-        console.error('WalletService: Failed to add token:', error);
-        this.error.set('Failed to add token to MetaMask');
-      }
-    } else {
-        console.warn('WalletService: Provider not found for addTokenToMetaMask');
+        },
+      });
+      this.log('addTokenToMetaMask: request sent');
+    } catch (e) {
+      this.err('addTokenToMetaMask: error:', e);
+      this.error.set('Failed to add token to MetaMask');
     }
   }
 
   public async disconnectWallet() {
-    console.log('WalletService: Disconnecting wallet...');
-    
-    // Store disconnected state in localStorage
-    localStorage.setItem('wallet_disconnected', 'true');
-    
-    // Always clean up WalletConnect provider if it exists and send proper disconnect message
+    this.log('disconnectWallet: begin');
+
+    localStorage.removeItem(this.ACTIVE_PROVIDER_KEY);
+
     if (this.walletConnectProvider) {
-        try {
-          console.log('WalletService: Revoking WalletConnect session and sending disconnect message...');    
-          // Disconnect sends the proper sign-off message to the wallet and revokes the session
-          await this.walletConnectProvider.disconnect();       
-          console.log('WalletService: WalletConnect session revoked and disconnect message sent successfully');
-        } catch (err) {
-          console.error('Error disconnecting WalletConnect:', err);
-        }
-        // Reset the provider instance so it can be reinitialized with QR code on next connect
+      try {
+        this.log('disconnectWallet: disconnecting WalletConnect session...');
+        await this.walletConnectProvider.disconnect();
+        this.log('disconnectWallet: WalletConnect disconnected');
+      } catch (e) {
+        this.err('disconnectWallet: WalletConnect disconnect error:', e);
+      } finally {
         this.walletConnectProvider = null;
+      }
     }
-    
+
     this.activeProviderType.set(null);
     this.currentAccount.set(null);
     this.accounts.set([]);
     this.resetBalances();
+    this.log('disconnectWallet: done');
   }
 
   public switchAccount(address: string) {
-    console.log('WalletService: Switching account to:', address);
+    this.log('switchAccount:', address);
     if (this.accounts().includes(address)) {
       this.currentAccount.set(address);
-      this.fetchBalances(address);
+      void this.fetchBalances(address);
     } else {
-      console.warn('WalletService: Attempted to switch to unknown account:', address);
+      this.warn('switchAccount: unknown account:', address);
     }
   }
 
   public async refreshBalances() {
     const current = this.currentAccount();
-    console.log('WalletService: Refreshing balances for:', current);
-    if (current) {
-      await this.fetchBalances(current);
-    }
+    this.log('refreshBalances:', current);
+    if (current) await this.fetchBalances(current);
   }
 
   private resetBalances() {
-    console.log('WalletService: Resetting balances');
+    this.log('resetBalances');
     this.hypeBalance.set(null);
     this.qoneBalance.set(null);
   }
