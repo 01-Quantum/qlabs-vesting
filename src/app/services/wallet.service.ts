@@ -48,6 +48,7 @@ export class WalletService {
 
   // Read-only provider for balance reads (fast + stable)
   private readonly rpcProvider = new JsonRpcProvider(environment.networkDetails.rpcUrls[0]);
+  private balancesInFlight = new Map<string, Promise<void>>();
 
   // Guards
   private isMetaMaskListenerSet = false;
@@ -205,6 +206,7 @@ export class WalletService {
         this.log('WalletConnect connect event:', info);
         this.log('WalletConnect session now:', this.walletConnectProvider?.session);
         this.log('WalletConnect accounts now:', this.walletConnectProvider?.accounts);
+        this.validateChainOrSetError(this.walletConnectProvider, 'WalletConnect');
       });
 
       // Keep state synced. Also close modal if it stayed open.
@@ -212,11 +214,7 @@ export class WalletService {
         this.log('WalletConnect accountsChanged:', accounts);
 
         if (accounts?.length > 0) {
-          const modal = (this.walletConnectProvider as any)?.modal;
-          if (modal?.closeModal) {
-            this.log('WalletConnect modal: closing (accountsChanged)');
-            modal.closeModal();
-          }
+          this.closeWcModal('accountsChanged');
         }
 
         void this.handleAccountsChanged(accounts);
@@ -243,6 +241,7 @@ export class WalletService {
 
     if (accounts.length > 0) {
       await this.setActiveSession('walletconnect', accounts);
+      await this.validateChainOrSetError(this.walletConnectProvider, 'WalletConnect');
       return true;
     }
     return false;
@@ -279,11 +278,7 @@ export class WalletService {
           await this.setActiveSession('walletconnect', accounts);
         }
         // Close modal if it appears in a weird state
-        const modal = (this.walletConnectProvider as any)?.modal;
-        if (modal?.closeModal) {
-          this.log('WalletConnect modal: closing (pre-check)');
-          modal.closeModal();
-        }
+        this.closeWcModal('pre-check');
         return;
       }
 
@@ -296,17 +291,8 @@ export class WalletService {
 
         if (newAccounts.length > 0) {
           await this.setActiveSession('walletconnect', newAccounts);
-
-          // Close QR modal if it stayed open / reopened as black
-          const modal = (this.walletConnectProvider as any)?.modal;
-          this.log('WalletConnect modal object:', modal);
-
-          if (modal?.closeModal) {
-            this.log('WalletConnect modal: closing');
-            modal.closeModal();
-          } else {
-            this.warn('WalletConnect modal: closeModal() not available');
-          }
+          this.closeWcModal('post-connect');
+          
         } else {
           this.warn('connectWalletConnect: connect() finished but accounts still empty');
         }
@@ -366,6 +352,7 @@ export class WalletService {
 
       if (addresses.length > 0) {
         await this.setActiveSession('metamask', addresses);
+        await this.validateChainOrSetError(provider, 'MetaMask');
       } else {
         this.log('rehydrateMetaMask: no connected accounts');
       }
@@ -430,6 +417,7 @@ export class WalletService {
         this.log('MetaMask: connected accounts:', accounts);
 
         await this.setActiveSession('metamask', accounts);
+        await this.validateChainOrSetError(mm, 'MetaMask');
       }
 
       if (type === 'walletconnect') {
@@ -529,8 +517,20 @@ export class WalletService {
   // ----------------------------
 
   private async fetchBalances(address: string) {
-    this.log('fetchBalances:', address);
-    await Promise.all([this.fetchHypeBalance(address), this.fetchQoneBalance(address)]);
+    const key = address.toLowerCase();
+    const existing = this.balancesInFlight.get(key);
+    if (existing) {
+      this.log('fetchBalances: already in flight for', key);
+      return existing;
+    }
+  
+    const p = (async () => {
+      this.log('fetchBalances:', address);
+      await Promise.all([this.fetchHypeBalance(address), this.fetchQoneBalance(address)]);
+    })().finally(() => this.balancesInFlight.delete(key));
+  
+    this.balancesInFlight.set(key, p);
+    return p;
   }
 
   private async fetchHypeBalance(address: string) {
@@ -642,5 +642,29 @@ export class WalletService {
     this.log('resetBalances');
     this.hypeBalance.set(null);
     this.qoneBalance.set(null);
+  }
+
+  private async validateChainOrSetError(provider: any, label: 'MetaMask' | 'WalletConnect') {
+    try {
+      const expected = Number(environment.networkDetails.chainId);
+      const current = Number(provider?.chainId ?? await provider?.request?.({ method: 'eth_chainId' }));
+      this.log(`${label}: chain check`, { current, expected });
+  
+      if (current !== expected) {
+        this.error.set(`Wrong network. Please switch to ${environment.networkDetails.chainName}.`);
+        return false;
+      }
+      return true;
+    } catch (e) {
+      this.err(`${label}: chain check failed`, e);
+      return true; // don't hard-fail
+    }
+  }
+  private closeWcModal(reason: string) {
+    const modal = (this.walletConnectProvider as any)?.modal;
+    if (modal?.closeModal) {
+      this.log(`WalletConnect modal: closing (${reason})`);
+      modal.closeModal();
+    }
   }
 }
