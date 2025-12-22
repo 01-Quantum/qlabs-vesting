@@ -628,7 +628,7 @@ export class WalletService {
           type: 'ERC20',
           options: {
             address: environment.coinAddress,
-            symbol: 'QLABS',
+            symbol: environment.coinSymbol,
             decimals: 18,
           },
         },
