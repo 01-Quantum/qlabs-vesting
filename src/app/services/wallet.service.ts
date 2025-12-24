@@ -66,6 +66,9 @@ export class WalletService {
   }
 
   constructor() {
+    // Start provider discovery immediately
+    this.tryEip6963Discovery();
+
     const savedProvider = localStorage.getItem(this.ACTIVE_PROVIDER_KEY) as ProviderType | null;
     this.log('Constructor: savedProvider =', savedProvider);
 
@@ -96,28 +99,36 @@ export class WalletService {
     const eth = (window as any).ethereum;
     if (!eth) {
       this.warn('getMetaMaskProvider: window.ethereum not found');
-      this.tryEip6963Discovery();
       return null;
     }
 
-    // Multiple injected providers case
+    // Multiple injected providers case (e.g. Rabby + MetaMask)
     if (eth.providers?.length) {
-      const mm = eth.providers.find((p: any) => p.isMetaMask);
-      if (mm) {
-        this.metaMaskProvider = mm;
-        this.log('getMetaMaskProvider: found MetaMask in ethereum.providers[]');
-        return mm;
+      // 1. Try to find the one that is ONLY MetaMask (not Rabby, not Coinbase, etc.)
+      const realMetaMask = eth.providers.find((p: any) => p.isMetaMask && !p.isRabby && !p.isCoinbaseWallet && !p.isBraveWallet);
+      if (realMetaMask) {
+        this.metaMaskProvider = realMetaMask;
+        this.log('getMetaMaskProvider: found real MetaMask in ethereum.providers[]');
+        return realMetaMask;
+      }
+      
+      // 2. Fallback to the first one that says it's MetaMask
+      const anyMetaMask = eth.providers.find((p: any) => p.isMetaMask);
+      if (anyMetaMask) {
+        this.metaMaskProvider = anyMetaMask;
+        this.log('getMetaMaskProvider: found a MetaMask-compatible provider in ethereum.providers[]');
+        return anyMetaMask;
       }
     }
 
+    // Single provider case
     if (eth.isMetaMask) {
       this.metaMaskProvider = eth;
       this.log('getMetaMaskProvider: window.ethereum is MetaMask');
       return eth;
     }
 
-    this.warn('getMetaMaskProvider: MetaMask not detected via legacy paths; trying EIP-6963');
-    this.tryEip6963Discovery();
+    this.warn('getMetaMaskProvider: MetaMask not detected via legacy paths');
     return null;
   }
 
@@ -352,8 +363,11 @@ export class WalletService {
           /canceled|cancelled/i.test(msg);
 
         if (cancelled) {
-          this.warn('connectWalletConnect: cancelled/reset/closed => not retrying');
-          return;
+          this.warn('connectWalletConnect: cancelled/reset/closed');
+          // Ensure we have a descriptive message for the UI if the error is too cryptic
+          if (!msg || msg === '[object Object]') {
+            e.message = 'Connection request cancelled';
+          }
         }
 
         throw e;
@@ -439,8 +453,16 @@ export class WalletService {
 
     try {
       if (type === 'metamask') {
-        const mm = this.getMetaMaskProvider();
-        if (!mm) throw new Error('MetaMask is not installed or not detected');
+        let mm = this.getMetaMaskProvider();
+        
+        // If not found immediately, wait a bit for EIP-6963 discovery to catch up
+        if (!mm) {
+          this.log('MetaMask not found immediately, waiting for discovery...');
+          await new Promise(resolve => setTimeout(resolve, 500));
+          mm = this.getMetaMaskProvider();
+        }
+
+        if (!mm) throw new Error('MetaMask is not installed or not detected. If you have multiple wallets, please ensure MetaMask is active.');
 
         this.listenForMetaMaskAccountChanges();
 
