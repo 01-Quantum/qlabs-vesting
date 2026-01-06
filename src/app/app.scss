@@ -1,87 +1,97 @@
+$lime-green: #a3ff12;
+$black: #000;
+$dark-gray: #111;
+$border-gray: #333;
+
 .app-header {
   width: 100%;
-  background-color: #000;
-  border-bottom: 1px solid #111;
+  background-color: $black;
+  border-bottom: 1px solid $dark-gray;
   position: relative;
   z-index: 100;
   box-sizing: border-box;
-}
 
-.header-content {
-  display: grid;
-  grid-template-columns: 20% 60% 20%;
-  align-items: center;
-  width: 100%;
-  padding: 1rem 2rem;
-  box-sizing: border-box;
-}
+  .header-content {
+    display: grid;
+    grid-template-columns: 20% 60% 20%;
+    align-items: center;
+    width: 100%;
+    padding: 1rem 2rem;
+    box-sizing: border-box;
 
-.header-left {
-  /* No styles needed, acts as a spacer */
-}
+    @media (max-width: 768px) {
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+      padding: 1rem;
+    }
+  }
 
-.header-center {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
+  .header-center {
+    display: flex;
+    justify-content: center;
 
-.qone-text {
-  font-family: 'Neue Machina', sans-serif;
-  font-weight: 800;
-  font-size: 1.25rem;
-  color: #fff;
-  letter-spacing: 0.1em;
-  margin: 0;
-  padding: 0;
-}
+    .qone-text {
+      font-family: 'Neue Machina', sans-serif;
+      font-weight: 800;
+      font-size: 1.25rem;
+      color: #fff;
+      letter-spacing: 0.1em;
+    }
+  }
 
-.header-right {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 1rem;
+  .header-right {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 1rem;
+
+    @media (max-width: 768px) {
+      width: 100%;
+      justify-content: center;
+    }
+  }
 }
 
 .icon-square {
   width: 28px;
   height: 28px;
-  background-color: #a3ff12;
+  background-color: $lime-green;
   border-radius: 2px;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: opacity 0.2s;
 
-  &:hover {
-    opacity: 0.8;
+  &:hover { opacity: 0.8; }
+
+  .x-icon {
+    width: 16px;
+    height: 16px;
+    fill: $black;
   }
 }
 
-.x-icon {
-  width: 16px;
-  height: 16px;
-  fill: #000;
-}
-
-.litepaper-btn {
-  background-color: #000;
-  color: #fff;
-  text-decoration: none;
+.litepaper-btn, .qlabs-btn {
   padding: 0.5rem 1rem;
   font-family: 'Neue Machina', sans-serif;
   font-weight: 800;
   font-size: 0.8rem;
-  border: 1px solid #333;
+  text-decoration: none;
   border-radius: 2px;
-  transition: all 0.2s;
-  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
   min-width: 100px;
+  transition: all 0.2s;
+  position: relative;
+}
 
-  // Small green accent in corner
+.litepaper-btn {
+  background-color: $black;
+  color: #fff;
+  border: 1px solid $border-gray;
+
   &::after {
     content: '';
     position: absolute;
@@ -89,38 +99,22 @@
     right: -1px;
     width: 8px;
     height: 8px;
-    background-color: #a3ff12;
+    background-color: $lime-green;
     clip-path: polygon(100% 0, 0 0, 100% 100%);
   }
 
   &:hover {
-    border-color: #a3ff12;
-    color: #a3ff12;
+    border-color: $lime-green;
+    color: $lime-green;
   }
 }
 
 .qlabs-btn {
-  background-color: #a3ff12;
-  color: #000;
-  text-decoration: none;
-  padding: 0.5rem 1.2rem;
-  font-family: 'Neue Machina', sans-serif;
-  font-weight: 800;
-  font-size: 0.8rem;
-  border-radius: 2px;
-  transition: opacity 0.2s;
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 100px;
-
-  // Cut corner
+  background-color: $lime-green;
+  color: $black;
   clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%);
 
-  &:hover {
-    opacity: 0.9;
-  }
+  &:hover { opacity: 0.9; }
 }
 
 .main-container {
@@ -129,39 +123,8 @@
   align-items: center;
   justify-content: center;
   min-height: calc(100vh - 80px); 
-  font-family: 'Inter', sans-serif;
   padding: 1rem;
-  background: transparent;
   color: #fff;
   position: relative;
   overflow: hidden;
-}
-
-@media (max-width: 768px) {
-  .app-header {
-    padding: 1rem;
-  }
-
-  .header-content {
-    flex-direction: column;
-    gap: 1.5rem;
-  }
-
-  .header-center {
-    position: static;
-    transform: none;
-    flex: none;
-    width: 100%;
-  }
-
-  .header-left, .header-right {
-    flex: none;
-    width: 100%;
-  }
-
-  .header-right {
-    width: 100%;
-    justify-content: center;
-    gap: 1rem;
-  }
 }
