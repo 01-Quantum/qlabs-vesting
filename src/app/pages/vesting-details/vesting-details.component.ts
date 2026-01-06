@@ -5,13 +5,13 @@ import { VestingService } from '../../services/vesting.service';
 import { Router } from '@angular/router';
 
 @Component({
-  selector: 'app-vesting',
+  selector: 'app-vesting-details',
   standalone: true,
   imports: [CommonModule, DatePipe, DecimalPipe],
-  templateUrl: './vesting.component.html',
-  styleUrl: './vesting.component.scss'
+  templateUrl: './vesting-details.component.html',
+  styleUrl: './vesting-details.component.scss'
 })
-export class VestingComponent {
+export class VestingDetailsComponent {
   protected readonly walletService = inject(WalletService);
   protected readonly vestingService = inject(VestingService);
   private router = inject(Router);
@@ -36,4 +36,3 @@ export class VestingComponent {
     }
   }
 }
-
