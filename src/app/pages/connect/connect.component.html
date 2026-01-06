@@ -1,0 +1,31 @@
+<div class="connect-container">
+  <div class="connect-card">
+    <!-- Corner Accents -->
+    <div class="corner top-left"></div>
+    <div class="corner top-right"></div>
+    <div class="corner bottom-left"></div>
+    <div class="corner bottom-right"></div>
+
+    <div class="card-content">
+      <h1 class="title">
+        <span class="white">Claim Your</span>
+        <span class="green">qOne Tokens</span>
+      </h1>
+
+      <div class="buttons">
+        <button (click)="connect('metamask')" class="connect-btn">
+          <span>Metamask</span>
+          <img src="metamask.png" alt="MetaMask" class="icon">
+        </button>
+
+        <button (click)="connect('walletconnect')" class="connect-btn">
+          <span>WalletConnect</span>
+          <img src="walletconnect.svg" alt="WalletConnect" class="icon">
+        </button>
+      </div>
+
+      <a href="#" class="info-link">How Claiming Works?</a>
+    </div>
+  </div>
+</div>
+
