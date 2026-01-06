@@ -1,25 +1,17 @@
 /* You can add global styles to this file, and also import other style files */
-body {
+html, body {
+  height: 100%;
   margin: 0;
   padding: 0;
-  background-color: #000;
-  font-family: 'Inter', sans-serif;
 }
 
-/* Background Image Layer */
-.main-container::before {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: -10%; /* Shifted to the left */
-  transform: translateY(-50%);
-  width: 600px; /* Adjust size as needed */
-  height: 600px;
-  background-image: url("assets/qone.webp");
-  background-size: contain;
-  background-repeat: no-repeat;
+body {
+  background-color: #000;
+  background-image: url("assets/coins.png");
+  background-size: cover;
   background-position: center;
-  opacity: 0.15; /* Subtle visibility */
-  pointer-events: none; /* Ensure clicks pass through */
-  z-index: 0;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+  min-height: 100vh;
+  font-family: 'Inter', sans-serif;
 }
