@@ -39,18 +39,35 @@ export class VestingComponent {
   }
 
   public async claimAll() {
+    console.log('VestingComponent: Starting claimAll');
     const categories = this.vestingService.claimableCategories();
-    if (categories.length === 0) return;
+    if (categories.length === 0) {
+      console.warn('VestingComponent: No categories to claim');
+      return;
+    }
 
-    for (const cat of categories) {
-      await this.vestingService.claim(cat.category);
+    this.vestingService.isClaiming.set(true);
+    try {
+      for (const cat of categories) {
+        console.log(`VestingComponent: Claiming category ${cat.name} (${cat.category})`);
+        await this.vestingService.claim(cat.category, true);
+      }
+    } catch (err) {
+      console.error('VestingComponent: Error in claimAll loop:', err);
+    } finally {
+      this.vestingService.isClaiming.set(false);
     }
   }
 
   public async initialize() {
+    console.log('VestingComponent: Starting initialize');
     const account = this.walletService.currentAccount();
     if (account) {
-      await this.vestingService.initializeAllocations(account);
+      try {
+        await this.vestingService.initializeAllocations(account);
+      } catch (err) {
+        console.error('VestingComponent: Initialization failed:', err);
+      }
     }
   }
 

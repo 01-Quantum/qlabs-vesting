@@ -91,9 +91,9 @@ export class VestingService {
   }
 
   // We will call this when wallet connects
-  public async fetchClaimableAmount(address: string) {
-    console.log(`VestingService: Fetching claimable amount for ${address}`);
-    this.isLoading.set(true);
+  public async fetchClaimableAmount(address: string, silent: boolean = false) {
+    console.log(`VestingService: Fetching claimable amount for ${address}, silent: ${silent}`);
+    if (!silent) this.isLoading.set(true);
     try {
       // Check initialization status first
       await this.checkInitializationNeeded(address);
@@ -132,9 +132,9 @@ export class VestingService {
     }
   }
 
-  public async claim(category: number) {
-    console.log(`VestingService: Attempting to claim category ${category}`);
-    this.isClaiming.set(true);
+  public async claim(category: number, isBatch: boolean = false) {
+    console.log(`VestingService: Attempting to claim category ${category}, isBatch: ${isBatch}`);
+    if (!isBatch) this.isClaiming.set(true);
     this.error.set(null);
 
     try {
@@ -153,15 +153,19 @@ export class VestingService {
       
       // Refresh balances after claim
       const address = await signer.getAddress();
-      await this.fetchClaimableAmount(address);
+      await this.fetchClaimableAmount(address, true);
       // Refresh global stats too as totalClaimed changed
       await this.fetchGlobalStats();
       
     } catch (err: any) {
-      console.error('Error claiming tokens:', err);
-      this.error.set(err.message || 'Failed to claim tokens');
+      console.error('VestingService: Error claiming tokens:', err);
+      const errorMessage = err.reason || err.message || 'Failed to claim tokens';
+      this.error.set(errorMessage);
+      throw err; // Re-throw to let the caller know it failed
     } finally {
-      this.isClaiming.set(false);
+      if (!isBatch) {
+        this.isClaiming.set(false);
+      }
     }
   }
 
@@ -325,8 +329,10 @@ export class VestingService {
           throw e;
       }
     } catch (err: any) {
-      console.error('Error initializing allocations:', err);
-      this.error.set(err.message || 'Failed to initialize allocations');
+      console.error('VestingService: Error initializing allocations:', err);
+      const errorMessage = err.reason || err.message || 'Failed to initialize allocations';
+      this.error.set(errorMessage);
+      throw err;
     } finally {
       this.isInitializing.set(false);
       this.initializingCategoryName.set(null);
