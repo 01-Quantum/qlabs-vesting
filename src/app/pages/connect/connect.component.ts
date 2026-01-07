@@ -18,7 +18,7 @@ export class ConnectComponent {
     try {
       await this.walletService.connectWallet(type);
       if (this.walletService.currentAccount()) {
-        this.router.navigate(['/vesting-details']);
+        this.router.navigate(['/vesting']);
       }
     } catch (error) {
       console.error('Connection failed', error);

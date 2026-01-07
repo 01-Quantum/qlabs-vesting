@@ -20,6 +20,13 @@ export interface CategoryClaim {
   amount: string;
 }
 
+export interface AllocationStatus {
+  name: string;
+  percentage: number;
+  isCompleted: boolean;
+  category: number;
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -33,6 +40,7 @@ export class VestingService {
   public initializingCategoryName: WritableSignal<string | null> = signal(null);
   public uninitializedAllocations: WritableSignal<CategoryClaim[]> = signal([]);
   public initializationNeeded: WritableSignal<boolean> = signal(false);
+  public allocationStatuses: WritableSignal<AllocationStatus[]> = signal([]);
   public error: WritableSignal<string | null> = signal(null);
 
   // User Stats
@@ -85,7 +93,8 @@ export class VestingService {
     console.log(`VestingService: Fetching claimable amount for ${address}`);
     try {
       // Check initialization status first
-      this.checkInitializationNeeded(address);
+      await this.checkInitializationNeeded(address);
+      await this.fetchAllocationStatuses(address);
 
       const provider = new JsonRpcProvider(environment.networkDetails.rpcUrls[0]);
       const contract = new Contract(environment.vestingContractAddress, VESTING_ABI, provider);
@@ -207,6 +216,46 @@ export class VestingService {
       console.error('Error checking initialization:', err);
       this.userAllocations.set([]);
       this.uninitializedAllocations.set([]);
+    }
+  }
+
+  public async fetchAllocationStatuses(address: string) {
+    console.log(`VestingService: Fetching allocation statuses for ${address}`);
+    try {
+      const provider = new JsonRpcProvider(environment.networkDetails.rpcUrls[0]);
+      const contract = new Contract(environment.vestingContractAddress, VESTING_ABI, provider);
+      
+      const statuses: AllocationStatus[] = [];
+      
+      for (let i = 0; i <= 5; i++) {
+        const [claimable, allocData] = await Promise.all([
+            contract['getClaimableAmount'](address, i),
+            contract['getAllocation'](address, i)
+        ]);
+        
+        // allocData is [totalAmount, claimedAmount, initialized]
+        const totalAmount = allocData[0];
+        const claimedAmount = allocData[1];
+        const initialized = allocData[2];
+
+        if (initialized || totalAmount > 0n) {
+            const vestedAmount = claimedAmount + claimable;
+            const percentage = totalAmount > 0n 
+                ? Number((vestedAmount * 10000n) / totalAmount) / 100 
+                : 0;
+            
+            statuses.push({
+                name: this.categoryNames[i],
+                percentage: percentage,
+                isCompleted: percentage >= 100,
+                category: i
+            });
+        }
+      }
+      
+      this.allocationStatuses.set(statuses);
+    } catch (err) {
+      console.error('Error fetching allocation statuses:', err);
     }
   }
 
