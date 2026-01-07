@@ -54,6 +54,16 @@ export class VestingComponent {
     }
   }
 
+  public async switchWallet() {
+    await this.walletService.disconnectWallet();
+    this.router.navigate(['/']);
+  }
+
+  public hasAllocations(): boolean {
+    return this.vestingService.userAllocations().length > 0 || 
+           this.vestingService.allocationStatuses().length > 0;
+  }
+
   public shortenAddress(addr: string | null): string {
     if (!addr) return '';
     return `${addr.substring(0, 6)}...${addr.substring(addr.length - 4)}`;

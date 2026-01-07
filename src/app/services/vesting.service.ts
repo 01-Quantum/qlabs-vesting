@@ -37,6 +37,7 @@ export class VestingService {
   public claimableCategories: WritableSignal<CategoryClaim[]> = signal([]);
   public isClaiming: WritableSignal<boolean> = signal(false);
   public isInitializing: WritableSignal<boolean> = signal(false);
+  public isLoading: WritableSignal<boolean> = signal(false);
   public initializingCategoryName: WritableSignal<string | null> = signal(null);
   public uninitializedAllocations: WritableSignal<CategoryClaim[]> = signal([]);
   public initializationNeeded: WritableSignal<boolean> = signal(false);
@@ -91,6 +92,7 @@ export class VestingService {
   // We will call this when wallet connects
   public async fetchClaimableAmount(address: string) {
     console.log(`VestingService: Fetching claimable amount for ${address}`);
+    this.isLoading.set(true);
     try {
       // Check initialization status first
       await this.checkInitializationNeeded(address);
@@ -124,6 +126,8 @@ export class VestingService {
       console.error('Error fetching claimable amount:', err);
       this.claimableAmount.set(null);
       this.claimableCategories.set([]);
+    } finally {
+      this.isLoading.set(false);
     }
   }
 

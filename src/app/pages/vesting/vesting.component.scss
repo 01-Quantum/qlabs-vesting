@@ -14,6 +14,69 @@ $text-gray: #888;
   padding: 1.5rem 1rem;
 }
 
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  color: #fff;
+  font-family: 'Neue Machina', sans-serif;
+
+  .loader {
+    width: 40px;
+    height: 40px;
+    border: 3px solid rgba(255, 255, 255, 0.1);
+    border-top-color: $lime-green;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.no-tokens-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 2rem;
+  width: 100%;
+
+  .no-tokens-title {
+    font-family: 'Neue Machina', sans-serif;
+    font-weight: 800;
+    font-size: 2.5rem;
+    line-height: 1.1;
+    color: #fff;
+    margin: 0;
+
+    .highlight {
+      color: $lime-green;
+    }
+  }
+
+  .no-tokens-desc {
+    font-family: 'Inter', sans-serif;
+    color: #fff;
+    font-size: 1.1rem;
+    line-height: 1.6;
+    max-width: 400px;
+    margin: 0;
+
+    .highlight {
+      color: $lime-green;
+      text-decoration: underline;
+      cursor: pointer;
+    }
+  }
+
+  .switch-btn {
+    margin-top: 1rem;
+  }
+}
+
 .page-title {
   font-family: 'Neue Machina', sans-serif;
   font-weight: 800;
@@ -100,7 +163,8 @@ $text-gray: #888;
   padding: 2rem 1.5rem;
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  min-height: 400px; // Ensure consistent height for both states
+  justify-content: center;
 
   .corner {
     position: absolute;
@@ -114,6 +178,13 @@ $text-gray: #888;
     &.bottom-left { bottom: -2px; left: -2px; border-right: none; border-top: none; }
     &.bottom-right { bottom: -2px; right: -2px; border-left: none; border-top: none; }
   }
+}
+
+.allocation-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  width: 100%;
 }
 
 .stats-box {

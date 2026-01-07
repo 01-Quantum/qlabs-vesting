@@ -1,72 +1,99 @@
 <div class="vesting-container">
-  <div class="vesting-card">
+  <!-- Loading State -->
+  <div class="loading-state" *ngIf="vestingService.isLoading()">
+    <div class="loader"></div>
+    <span>Loading allocations...</span>
+  </div>
+
+  <!-- Content Card (Both Allocation and No Allocation states go inside here) -->
+  <div class="vesting-card" *ngIf="!vestingService.isLoading()">
     <!-- Decoration corners -->
     <div class="corner top-left"></div>
     <div class="corner top-right"></div>
     <div class="corner bottom-left"></div>
     <div class="corner bottom-right"></div>
 
-    <h1 class="page-title">Available Allocation</h1>
-
-    <!-- Wallet Selection Dropdown -->
-    <div class="wallet-selector-container">
-      <div class="wallet-dropdown-trigger" (click)="toggleWalletDropdown()">
-        <span class="address">{{ shortenAddress(walletService.currentAccount()) }}</span>
-        <svg class="chevron" [class.open]="showWalletDropdown" width="12" height="8" viewBox="0 0 12 8" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M1 1L6 6L11 1" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-        </svg>
-      </div>
+    <!-- No Allocations State -->
+    <div class="no-tokens-container" *ngIf="!hasAllocations()">
+      <h1 class="no-tokens-title">
+        No Tokens Available<br>
+        <span class="highlight">for This Wallet</span>
+      </h1>
       
-      <div class="wallet-dropdown-menu" *ngIf="showWalletDropdown">
-        <div class="wallet-option" 
-             *ngFor="let acc of walletService.accounts()" 
-             (click)="selectAccount(acc)"
-             [class.active]="acc === walletService.currentAccount()">
-          {{ shortenAddress(acc) }}
+      <p class="no-tokens-desc">
+        This Wallet does not have an active qOne allocation. If you believe this is incorrect, 
+        <span class="highlight">please review the FAQ</span> or connect different wallet.
+      </p>
+
+      <button class="action-btn switch-btn" (click)="switchWallet()">
+        Switch Wallet
+      </button>
+    </div>
+
+    <!-- Main Vesting Content (Allocation state) -->
+    <div class="allocation-content" *ngIf="hasAllocations()">
+      <h1 class="page-title">Available Allocation</h1>
+
+      <!-- Wallet Selection Dropdown -->
+      <div class="wallet-selector-container">
+        <div class="wallet-dropdown-trigger" (click)="toggleWalletDropdown()">
+          <span class="address">{{ shortenAddress(walletService.currentAccount()) }}</span>
+          <svg class="chevron" [class.open]="showWalletDropdown" width="12" height="8" viewBox="0 0 12 8" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M1 1L6 6L11 1" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </div>
+        
+        <div class="wallet-dropdown-menu" *ngIf="showWalletDropdown">
+          <div class="wallet-option" 
+               *ngFor="let acc of walletService.accounts()" 
+               (click)="selectAccount(acc)"
+               [class.active]="acc === walletService.currentAccount()">
+            {{ shortenAddress(acc) }}
+          </div>
         </div>
       </div>
-    </div>
 
-    <!-- Allocation Stats Gradient Box -->
-    <div class="stats-box">
-      <div class="stat-item">
-        <span class="stat-label">Total Allocation</span>
-        <span class="stat-value">{{ vestingService.totalAllocated() || '0' | number:'1.0-0' }}</span>
+      <!-- Allocation Stats Gradient Box -->
+      <div class="stats-box">
+        <div class="stat-item">
+          <span class="stat-label">Total Allocation</span>
+          <span class="stat-value">{{ vestingService.totalAllocated() || '0' | number:'1.0-0' }}</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Available To Claim</span>
+          <span class="stat-value">{{ vestingService.claimableAmount() || '0' | number:'1.0-0' }}</span>
+        </div>
       </div>
-      <div class="stat-item">
-        <span class="stat-label">Available To Claim</span>
-        <span class="stat-value">{{ vestingService.claimableAmount() || '0' | number:'1.0-0' }}</span>
-      </div>
-    </div>
 
-    <!-- Action Button -->
-    <button class="action-btn" 
-            *ngIf="!vestingService.initializationNeeded()"
-            [disabled]="vestingService.isClaiming() || !vestingService.claimableAmount() || vestingService.claimableAmount() === '0.0'"
-            (click)="claimAll()">
-      <span *ngIf="!vestingService.isClaiming()">Claim Tokens</span>
-      <span *ngIf="vestingService.isClaiming()">Claiming...</span>
-    </button>
+      <!-- Action Button -->
+      <button class="action-btn" 
+              *ngIf="!vestingService.initializationNeeded()"
+              [disabled]="vestingService.isClaiming() || !vestingService.claimableAmount() || vestingService.claimableAmount() === '0.0'"
+              (click)="claimAll()">
+        <span *ngIf="!vestingService.isClaiming()">Claim Tokens</span>
+        <span *ngIf="vestingService.isClaiming()">Claiming...</span>
+      </button>
 
-    <button class="action-btn initialize" 
-            *ngIf="vestingService.initializationNeeded()"
-            [disabled]="vestingService.isInitializing()"
-            (click)="initialize()">
-      <span *ngIf="!vestingService.isInitializing()">Initialize</span>
-      <span *ngIf="vestingService.isInitializing()">Initializing...</span>
-    </button>
+      <button class="action-btn initialize" 
+              *ngIf="vestingService.initializationNeeded()"
+              [disabled]="vestingService.isInitializing()"
+              (click)="initialize()">
+        <span *ngIf="!vestingService.isInitializing()">Initialize</span>
+        <span *ngIf="vestingService.isInitializing()">Initializing...</span>
+      </button>
 
-    <!-- Vesting Status Section -->
-    <div class="status-section">
-      <h2 class="status-title">Vesting Status</h2>
-      
-      <div class="status-list">
-        <div class="status-row" *ngFor="let status of vestingService.allocationStatuses()">
-          <span class="row-label">{{ status.name }}</span>
-          <span class="row-value" [class.completed]="status.isCompleted">
-            <ng-container *ngIf="!status.isCompleted">{{ status.percentage }}% vested</ng-container>
-            <ng-container *ngIf="status.isCompleted">Completed</ng-container>
-          </span>
+      <!-- Vesting Status Section -->
+      <div class="status-section">
+        <h2 class="status-title">Vesting Status</h2>
+        
+        <div class="status-list">
+          <div class="status-row" *ngFor="let status of vestingService.allocationStatuses()">
+            <span class="row-label">{{ status.name }}</span>
+            <span class="row-value" [class.completed]="status.isCompleted">
+              <ng-container *ngIf="!status.isCompleted">{{ status.percentage }}% vested</ng-container>
+              <ng-container *ngIf="status.isCompleted">Completed</ng-container>
+            </span>
+          </div>
         </div>
       </div>
     </div>
