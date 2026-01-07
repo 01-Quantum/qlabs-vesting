@@ -46,6 +46,7 @@ export class VestingService {
 
   // User Stats
   public userAllocations: WritableSignal<CategoryClaim[]> = signal([]);
+  public userTotalAllocation: WritableSignal<string | null> = signal(null);
 
   // Global Stats
   public tgeDate: WritableSignal<Date | null> = signal(null);
@@ -184,11 +185,13 @@ export class VestingService {
       // Populate user allocations from Supabase data
       const userAllocs: CategoryClaim[] = [];
       const uninitializedAllocs: CategoryClaim[] = [];
+      let totalAllocationWei = 0n;
       let needed = false;
 
       for (const alloc of allocations) {
         const category = alloc.category;
         const amountWei = BigInt(alloc.amount_wei);
+        totalAllocationWei += amountWei;
         
         const claimObj: CategoryClaim = {
           category: category,
@@ -214,11 +217,13 @@ export class VestingService {
       }
       
       this.userAllocations.set(userAllocs);
+      this.userTotalAllocation.set(formatUnits(totalAllocationWei, 18));
       this.initializationNeeded.set(needed);
       this.uninitializedAllocations.set(uninitializedAllocs);
     } catch (err) {
       console.error('Error checking initialization:', err);
       this.userAllocations.set([]);
+      this.userTotalAllocation.set(null);
       this.uninitializedAllocations.set([]);
     }
   }
