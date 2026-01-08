@@ -131,75 +131,6 @@ $text-gray: #888;
   }
 }
 
-.wallet-selector-container {
-  position: relative;
-  z-index: 10;
-  display: flex;
-  justify-content: center;
-}
-
-.wallet-dropdown-trigger {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  padding: 0.5rem 1rem;
-  background: $black;
-  border: 1px solid $border-gray;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: all 0.2s;
-
-  &:hover {
-    border-color: $lime-green;
-  }
-
-  .address {
-    font-family: 'Neue Machina', sans-serif;
-    color: #fff;
-    font-size: 0.9rem;
-    font-weight: 800;
-  }
-
-  .chevron {
-    width: 10px;
-    height: 6px;
-    transition: transform 0.2s;
-    stroke: #fff;
-    &.open { transform: rotate(180deg); }
-  }
-}
-
-.wallet-dropdown-menu {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  right: 0;
-  margin-top: 0.5rem;
-  background: $black;
-  border: 1px solid $border-gray;
-  border-radius: 4px;
-  overflow: hidden;
-  box-shadow: 0 10px 25px rgba(0,0,0,0.8);
-}
-
-.wallet-option {
-  padding: 0.6rem 1rem;
-  color: #fff;
-  font-family: 'Neue Machina', sans-serif;
-  font-size: 0.85rem;
-  cursor: pointer;
-  transition: all 0.2s;
-
-  &:hover {
-    background: rgba(255, 255, 255, 0.05);
-  }
-
-  &.active {
-    color: $lime-green;
-    background: rgba($lime-green, 0.05);
-  }
-}
-
 .vesting-card {
   width: 100%;
   position: relative;
@@ -230,23 +161,6 @@ $text-gray: #888;
   flex-direction: column;
   gap: 1.5rem;
   width: 100%;
-
-  .disconnect-link {
-    background: none;
-    border: none;
-    color: rgba(255, 255, 255, 0.4);
-    font-family: 'Inter', sans-serif;
-    font-size: 0.8rem;
-    text-decoration: underline;
-    cursor: pointer;
-    align-self: center;
-    margin-top: 0.5rem;
-    transition: color 0.2s;
-
-    &:hover {
-      color: $lime-green;
-    }
-  }
 }
 
 .stats-box {

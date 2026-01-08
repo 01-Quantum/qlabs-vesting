@@ -15,25 +15,6 @@
 
     <h1 class="page-title">Available Allocation</h1>
 
-    <!-- Wallet Selection Dropdown (Shared across both states) -->
-    <div class="wallet-selector-container">
-      <div class="wallet-dropdown-trigger" (click)="toggleWalletDropdown()">
-        <span class="address">{{ shortenAddress(walletService.currentAccount()) }}</span>
-        <svg class="chevron" [class.open]="showWalletDropdown" width="12" height="8" viewBox="0 0 12 8" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M1 1L6 6L11 1" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-        </svg>
-      </div>
-      
-      <div class="wallet-dropdown-menu" *ngIf="showWalletDropdown">
-        <div class="wallet-option" 
-             *ngFor="let acc of walletService.accounts()" 
-             (click)="selectAccount(acc)"
-             [class.active]="acc === walletService.currentAccount()">
-          {{ shortenAddress(acc) }}
-        </div>
-      </div>
-    </div>
-
     <!-- Global Error Message -->
     <div class="error-banner" *ngIf="vestingService.error()">
       <div class="error-content">
@@ -70,10 +51,10 @@
     <div class="allocation-content" *ngIf="hasAllocations()">
       <!-- Allocation Stats Gradient Box -->
       <div class="stats-box">
-      <div class="stat-item">
-        <span class="stat-label">Remaining allocation</span>
-        <span class="stat-value">{{ vestingService.userRemainingAllocation() || '0' | number:'1.0-0' }}</span>
-      </div>
+        <div class="stat-item">
+          <span class="stat-label">Remaining allocation</span>
+          <span class="stat-value">{{ vestingService.userRemainingAllocation() || '0' | number:'1.0-0' }}</span>
+        </div>
         <div class="stat-item">
           <span class="stat-label">Available To Claim</span>
           <span class="stat-value">{{ vestingService.claimableAmount() || '0' | number:'1.0-0' }}</span>
@@ -111,10 +92,6 @@
           </div>
         </div>
       </div>
-
-      <button class="disconnect-link" (click)="switchWallet()">
-        Disconnect wallet
-      </button>
     </div>
   </div>
 </div>

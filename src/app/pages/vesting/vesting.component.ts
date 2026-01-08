@@ -1,4 +1,4 @@
-import { Component, signal, inject, effect } from '@angular/core';
+import { Component, inject, effect } from '@angular/core';
 import { CommonModule, DecimalPipe } from '@angular/common';
 import { WalletService } from '../../services/wallet.service';
 import { VestingService } from '../../services/vesting.service';
@@ -16,8 +16,6 @@ export class VestingComponent {
   protected readonly vestingService = inject(VestingService);
   private router = inject(Router);
 
-  public showWalletDropdown = false;
-
   constructor() {
     effect(() => {
       const account = this.walletService.currentAccount();
@@ -27,15 +25,6 @@ export class VestingComponent {
         this.router.navigate(['/']);
       }
     });
-  }
-
-  public toggleWalletDropdown() {
-    this.showWalletDropdown = !this.showWalletDropdown;
-  }
-
-  public selectAccount(account: string) {
-    this.walletService.switchAccount(account);
-    this.showWalletDropdown = false;
   }
 
   public async claimAll() {
@@ -86,4 +75,3 @@ export class VestingComponent {
     return `${addr.substring(0, 6)}...${addr.substring(addr.length - 4)}`;
   }
 }
-

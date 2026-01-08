@@ -3,6 +3,36 @@
     <div class="header-left"></div>
     <div class="header-center">
       <span class="qone-text">qONE</span>
+      
+      <!-- Wallet Info (Visible only when connected) -->
+      <div class="header-wallet-section" *ngIf="walletService.currentAccount()">
+        <div class="wallet-selector-container">
+          <div class="wallet-dropdown-trigger" (click)="toggleWalletDropdown()" [class.open]="showWalletDropdown">
+            <div class="wallet-icon-circle">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M22 10h-4a2 2 0 0 0 0 4h4"/></svg>
+            </div>
+            <span class="address">{{ shortenAddress(walletService.currentAccount()) }}</span>
+            <div class="chevron" [class.open]="showWalletDropdown">
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M6 9L12 15L18 9" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </div>
+          </div>
+          
+          <div class="wallet-dropdown-menu" *ngIf="showWalletDropdown">
+            <div class="wallet-option" 
+                 *ngFor="let acc of walletService.accounts()" 
+                 (click)="selectAccount(acc)"
+                 [class.active]="acc === walletService.currentAccount()">
+              {{ shortenAddress(acc) }}
+            </div>
+          </div>
+        </div>
+
+        <button class="header-disconnect-btn" (click)="disconnect()">
+          Disconnect
+        </button>
+      </div>
     </div>
     <div class="header-right">
       <a href="https://x.com/qlabsofficial" target="_blank" class="icon-link">

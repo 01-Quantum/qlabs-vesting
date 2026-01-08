@@ -16,7 +16,7 @@ $border-gray: #333;
     grid-template-columns: 20% 60% 20%;
     align-items: center;
     width: 100%;
-    padding: 1rem 2rem;
+    padding: 0.5rem 2rem; // Reduced from 1rem to 0.5rem
     box-sizing: border-box;
 
     @media (max-width: 768px) {
@@ -30,6 +30,8 @@ $border-gray: #333;
   .header-center {
     display: flex;
     justify-content: center;
+    align-items: center;
+    gap: 1.5rem; // Reduced from 2rem
 
     .qone-text {
       font-family: 'Neue Machina', sans-serif;
@@ -37,6 +39,12 @@ $border-gray: #333;
       font-size: 1.25rem;
       color: #fff;
       letter-spacing: 0.1em;
+    }
+
+    .header-wallet-section {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
     }
   }
 
@@ -49,6 +57,134 @@ $border-gray: #333;
     @media (max-width: 768px) {
       width: 100%;
       justify-content: center;
+    }
+  }
+
+  // Nested wallet selector styles
+  .wallet-selector-container {
+    position: relative;
+    z-index: 10;
+    display: flex;
+    justify-content: center;
+  }
+
+  .wallet-dropdown-trigger {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.35rem 0.8rem; // Reduced from 0.5rem
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid $border-gray;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    min-width: 180px; 
+    justify-content: flex-start;
+
+    &:hover, &.open {
+      background: rgba(255, 255, 255, 0.1);
+      border-color: $lime-green;
+      
+      .chevron {
+        color: $lime-green;
+      }
+    }
+
+    .wallet-icon-circle {
+      width: 24px;
+      height: 24px;
+      background: rgba($lime-green, 0.1);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: $lime-green;
+      flex-shrink: 0;
+    }
+
+    .address {
+      font-family: 'Neue Machina', sans-serif;
+      color: #fff;
+      font-size: 0.85rem;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .chevron {
+      width: 24px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-left: auto;
+      color: #ffffff;
+      transition: transform 0.3s ease;
+      flex-shrink: 0;
+
+      svg {
+        width: 18px;
+        height: 18px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 3px;
+      }
+
+      &.open { 
+        transform: rotate(180deg);
+      }
+    }
+  }
+
+  .wallet-dropdown-menu {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
+    right: 0;
+    background: #0a0a0a;
+    border: 1px solid $border-gray;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.9);
+    animation: dropdownFade 0.2s ease-out;
+    z-index: 1000;
+  }
+
+  @keyframes dropdownFade {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .wallet-option {
+    padding: 0.6rem 1rem;
+    color: #fff;
+    font-family: 'Neue Machina', sans-serif;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: all 0.2s;
+
+    &:hover { background: rgba(255, 255, 255, 0.05); }
+
+    &.active {
+      color: $lime-green;
+      background: rgba($lime-green, 0.05);
+    }
+  }
+
+  .header-disconnect-btn {
+    background: transparent;
+    border: 1px solid $border-gray;
+    color: #fff;
+    padding: 0.35rem 0.8rem; // Match wallet selector height
+    border-radius: 4px;
+    font-family: 'Neue Machina', sans-serif;
+    font-weight: 800;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: all 0.2s;
+
+    &:hover {
+      border-color: #ff3b30;
+      color: #ff3b30;
     }
   }
 }
@@ -73,7 +209,7 @@ $border-gray: #333;
 }
 
 .litepaper-btn, .qlabs-btn {
-  padding: 0.5rem 1rem;
+  padding: 0.4rem 0.9rem; // Reduced from 0.5rem 1rem
   font-family: 'Neue Machina', sans-serif;
   font-weight: 800;
   font-size: 0.8rem;
@@ -122,7 +258,7 @@ $border-gray: #333;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: calc(100vh - 80px); 
+  min-height: calc(100vh - 60px); // Adjusted for shorter header
   padding: 1rem;
   color: #fff;
   position: relative;
