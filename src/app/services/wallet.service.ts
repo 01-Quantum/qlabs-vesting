@@ -411,6 +411,8 @@ export class WalletService {
         await this.validateChainOrSetError(provider, 'MetaMask');
       } else {
         this.log('rehydrateMetaMask: no connected accounts');
+        localStorage.removeItem(this.ACTIVE_PROVIDER_KEY);
+        this.activeProviderType.set(null);
       }
     } catch (e) {
       this.err('rehydrateMetaMask: error:', e);

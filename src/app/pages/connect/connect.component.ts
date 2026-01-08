@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { Component, inject, effect } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { WalletService } from '../../services/wallet.service';
 import { Router } from '@angular/router';
@@ -13,6 +13,15 @@ import { Router } from '@angular/router';
 export class ConnectComponent {
   private walletService = inject(WalletService);
   private router = inject(Router);
+
+  constructor() {
+    // If we're already connected, go to vesting page
+    effect(() => {
+      if (this.walletService.currentAccount()) {
+        this.router.navigate(['/vesting']);
+      }
+    });
+  }
 
   async connect(type: 'metamask' | 'walletconnect') {
     try {
