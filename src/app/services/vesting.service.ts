@@ -18,6 +18,7 @@ export interface CategoryClaim {
   category: number;
   name: string;
   amount: string;
+  rawAmount?: bigint;
 }
 
 export interface AllocationStatus {
@@ -46,7 +47,7 @@ export class VestingService {
 
   // User Stats
   public userAllocations: WritableSignal<CategoryClaim[]> = signal([]);
-  public userTotalAllocation: WritableSignal<string | null> = signal(null);
+  public userRemainingAllocation: WritableSignal<string | null> = signal(null);
 
   // Global Stats
   public tgeDate: WritableSignal<Date | null> = signal(null);
@@ -200,7 +201,8 @@ export class VestingService {
         const claimObj: CategoryClaim = {
           category: category,
           name: this.categoryNames[category],
-          amount: formatUnits(amountWei, 18)
+          amount: formatUnits(amountWei, 18),
+          rawAmount: amountWei
         };
         
         // Add to user allocations list
@@ -221,13 +223,11 @@ export class VestingService {
       }
       
       this.userAllocations.set(userAllocs);
-      this.userTotalAllocation.set(formatUnits(totalAllocationWei, 18));
       this.initializationNeeded.set(needed);
       this.uninitializedAllocations.set(uninitializedAllocs);
     } catch (err) {
       console.error('Error checking initialization:', err);
       this.userAllocations.set([]);
-      this.userTotalAllocation.set(null);
       this.uninitializedAllocations.set([]);
     }
   }
@@ -239,7 +239,11 @@ export class VestingService {
       const contract = new Contract(environment.vestingContractAddress, VESTING_ABI, provider);
       
       const statuses: AllocationStatus[] = [];
+      let totalRemainingWei = 0n;
       
+      // Get the intended total amounts from our Supabase-synced userAllocations signal
+      const intendedAllocs = this.userAllocations();
+
       for (let i = 0; i <= 5; i++) {
         const [claimable, allocData] = await Promise.all([
             contract['getClaimableAmount'](address, i),
@@ -247,9 +251,17 @@ export class VestingService {
         ]);
         
         // allocData is [totalAmount, claimedAmount, initialized]
-        const totalAmount = allocData[0];
-        const claimedAmount = allocData[1];
-        const initialized = allocData[2];
+        let totalAmount = BigInt(allocData[0]);
+        const claimedAmount = BigInt(allocData[1]);
+        const initialized = !!allocData[2];
+
+        // If not initialized on-chain yet, use the intended amount from Supabase
+        if (!initialized) {
+          const intended = intendedAllocs.find(a => a.category === i);
+          if (intended && intended.rawAmount) {
+            totalAmount = intended.rawAmount;
+          }
+        }
 
         if (initialized || totalAmount > 0n) {
             const vestedAmount = claimedAmount + claimable;
@@ -257,6 +269,10 @@ export class VestingService {
                 ? Number((vestedAmount * 10000n) / totalAmount) / 100 
                 : 0;
             
+            // Remaining = Total - Already Claimed
+            const remainingForCategory = totalAmount - claimedAmount;
+            totalRemainingWei += remainingForCategory;
+
             statuses.push({
                 name: this.categoryNames[i],
                 percentage: percentage,
@@ -267,8 +283,10 @@ export class VestingService {
       }
       
       this.allocationStatuses.set(statuses);
+      this.userRemainingAllocation.set(formatUnits(totalRemainingWei, 18));
     } catch (err) {
       console.error('Error fetching allocation statuses:', err);
+      this.userRemainingAllocation.set(null);
     }
   }
 

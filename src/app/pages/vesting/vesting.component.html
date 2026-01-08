@@ -70,10 +70,10 @@
     <div class="allocation-content" *ngIf="hasAllocations()">
       <!-- Allocation Stats Gradient Box -->
       <div class="stats-box">
-        <div class="stat-item">
-          <span class="stat-label">Total Allocation</span>
-          <span class="stat-value">{{ vestingService.userTotalAllocation() || '0' | number:'1.0-0' }}</span>
-        </div>
+      <div class="stat-item">
+        <span class="stat-label">Remaining allocation</span>
+        <span class="stat-value">{{ vestingService.userRemainingAllocation() || '0' | number:'1.0-0' }}</span>
+      </div>
         <div class="stat-item">
           <span class="stat-label">Available To Claim</span>
           <span class="stat-value">{{ vestingService.claimableAmount() || '0' | number:'1.0-0' }}</span>
