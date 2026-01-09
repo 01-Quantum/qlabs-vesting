@@ -13,6 +13,8 @@
     <div class="corner bottom-left"></div>
     <div class="corner bottom-right"></div>
 
+    <h1 class="page-title">Available Allocation</h1>
+
     <!-- Global Error Message -->
     <div class="error-banner" *ngIf="vestingService.error()">
       <div class="error-content">
@@ -45,8 +47,8 @@
       </div>
     </div>
 
+    <!-- Main Vesting Content (Allocation state) -->
     <div class="allocation-content" *ngIf="hasAllocations()">
-      <h1 class="page-title">Available Allocation</h1>
       <!-- Allocation Stats Gradient Box -->
       <div class="stats-box">
         <div class="stat-item">
@@ -77,7 +79,7 @@
       </button>
 
       <!-- Vesting Status Section -->
-      <div class="status-section" *ngIf="!vestingService.initializationNeeded()">
+      <div class="status-section">
         <h2 class="status-title">Vesting Status</h2>
         
         <div class="status-list">

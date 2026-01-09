@@ -8,7 +8,7 @@ const VESTING_ABI = [
   'function getClaimableAmount(address beneficiary, uint8 category) public view returns (uint256)',
   'function claim(uint8 category) external',
   'function initializeMyAllocation(uint256 totalAmount, uint8 category, bytes32[] calldata proof) external',
-  'function getAllocation(address beneficiary, uint8 category) external view returns (uint256 totalAmount, uint256 claimedAmount, bool initialized)',
+  'function getAllocation(address beneficiary, uint8 category) external view returns (tuple(uint256 totalAmount, uint256 claimedAmount, bool initialized))',
   'function tgeTimestamp() external view returns (uint256)',
   'function totalAllocated() external view returns (uint256)',
   'function totalClaimed() external view returns (uint256)'
@@ -210,7 +210,7 @@ export class VestingService {
 
         const allocData = await contract['getAllocation'](address, category);
         // allocData is [totalAmount, claimedAmount, initialized]
-        if (!allocData.initialized && !allocData[2]) {
+        if (!allocData[2]) {
           console.log(`VestingService: Allocation for category ${category} needs initialization`);
           needed = true;
           uninitializedAllocs.push(claimObj);
@@ -251,9 +251,9 @@ export class VestingService {
         ]);
         
         // allocData is [totalAmount, claimedAmount, initialized]
-        let totalAmount = BigInt(allocData.totalAmount || allocData[0]);
-        const claimedAmount = BigInt(allocData.claimedAmount || allocData[1]);
-        const initialized = !!(allocData.initialized || allocData[2]);
+        let totalAmount = BigInt(allocData[0]);
+        const claimedAmount = BigInt(allocData[1]);
+        const initialized = !!allocData[2];
 
         // If not initialized on-chain yet, use the intended amount from Supabase
         if (!initialized) {
@@ -269,9 +269,8 @@ export class VestingService {
                 ? Number((vestedAmount * 10000n) / totalAmount) / 100 
                 : 0;
             
-            // Remaining = Total - Already Vested (Claimed + Claimable)
-            // This shows the tokens that are still locked/vesting.
-            const remainingForCategory = totalAmount - vestedAmount;
+            // Remaining = Total - Already Claimed
+            const remainingForCategory = totalAmount - claimedAmount;
             totalRemainingWei += remainingForCategory;
 
             statuses.push({
