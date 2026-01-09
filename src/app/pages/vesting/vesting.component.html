@@ -77,7 +77,7 @@
       </button>
 
       <!-- Vesting Status Section -->
-      <div class="status-section">
+      <div class="status-section" *ngIf="!vestingService.initializationNeeded()">
         <h2 class="status-title">Vesting Status</h2>
         
         <div class="status-list">
