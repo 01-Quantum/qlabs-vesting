@@ -35,4 +35,8 @@ export class App {
     if (!addr) return '';
     return `${addr.substring(0, 6)}...${addr.substring(addr.length - 4)}`;
   }
+
+  public async addToken() {
+    await this.walletService.addTokenToMetaMask();
+  }
 }
