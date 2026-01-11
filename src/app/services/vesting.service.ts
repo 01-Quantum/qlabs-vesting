@@ -55,12 +55,12 @@ export class VestingService {
   public totalClaimed: WritableSignal<string | null> = signal(null);
 
   private categoryNames: {[key: number]: string} = {
-    0: '\"Early Supporters\"',
-    1: '\"Community Round\"',
-    2: '\"Public Sale\"',
-    3: '\"Team & Advisors\"',
-    4: '\"Liquidity/Treasury\"',
-    5: '\"Community Airdrops\"'
+    0: 'Early Supporters',
+    1: 'Community Round',
+    2: 'Public Sale',
+    3: 'Team & Advisors',
+    4: 'Liquidity/Treasury',
+    5: 'Community Airdrops'
   };
 
   constructor() {
