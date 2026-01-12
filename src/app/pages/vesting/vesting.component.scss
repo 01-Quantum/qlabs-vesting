@@ -93,11 +93,9 @@ $text-gray: #888;
   text-align: center;
 }
 
-.error-banner {
+.error-banner, .success-banner {
   margin: 1rem 0;
   padding: 0.75rem 1rem;
-  background: rgba(255, 59, 48, 0.1);
-  border: 1px solid rgba(255, 59, 48, 0.3);
   border-radius: 4px;
   display: flex;
   align-items: center;
@@ -105,6 +103,11 @@ $text-gray: #888;
   gap: 1rem;
   width: 100%;
   box-sizing: border-box;
+}
+
+.error-banner {
+  background: rgba(255, 59, 48, 0.1);
+  border: 1px solid rgba(255, 59, 48, 0.3);
 
   .error-content {
     display: flex;
@@ -128,6 +131,17 @@ $text-gray: #888;
     line-height: 1;
     opacity: 0.7;
     &:hover { opacity: 1; }
+  }
+}
+
+.success-banner {
+  background: rgba(163, 255, 18, 0.1);
+  border: 1px solid rgba(163, 255, 18, 0.3);
+
+  .success-text {
+    color: $lime-green;
+    font-size: 0.85rem;
+    font-weight: 500;
   }
 }
 

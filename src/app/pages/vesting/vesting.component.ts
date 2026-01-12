@@ -1,4 +1,4 @@
-import { Component, inject, effect } from '@angular/core';
+import { Component, inject, effect, signal, WritableSignal } from '@angular/core';
 import { CommonModule, DecimalPipe } from '@angular/common';
 import { WalletService } from '../../services/wallet.service';
 import { VestingService } from '../../services/vesting.service';
@@ -16,6 +16,9 @@ export class VestingComponent {
   protected readonly vestingService = inject(VestingService);
   private router = inject(Router);
 
+  public successMessage: WritableSignal<string | null> = signal(null);
+  private successTimeout: any = null;
+
   constructor() {
     effect(() => {
       const account = this.walletService.currentAccount();
@@ -27,6 +30,17 @@ export class VestingComponent {
         this.router.navigate(['/']);
       }
     });
+  }
+
+  private showSuccess(message: string) {
+    if (this.successTimeout) {
+      clearTimeout(this.successTimeout);
+    }
+    this.successMessage.set(message);
+    this.successTimeout = setTimeout(() => {
+      this.successMessage.set(null);
+      this.successTimeout = null;
+    }, 30000); // 30 seconds
   }
 
   public async claimAll() {
@@ -43,6 +57,7 @@ export class VestingComponent {
         console.log(`VestingComponent: Claiming category ${cat.name} (${cat.category})`);
         await this.vestingService.claim(cat.category, true);
       }
+      this.showSuccess('Success! Tokens claimed successfully.');
     } catch (err) {
       console.error('VestingComponent: Error in claimAll loop:', err);
     } finally {
@@ -56,6 +71,7 @@ export class VestingComponent {
     if (account) {
       try {
         await this.vestingService.initializeAllocations(account);
+        this.showSuccess('Success! Allocations initialized successfully.');
       } catch (err) {
         console.error('VestingComponent: Initialization failed:', err);
       }

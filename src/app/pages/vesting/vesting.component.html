@@ -78,6 +78,11 @@
         <span *ngIf="vestingService.isInitializing()">Initializing...</span>
       </button>
 
+      <!-- Success Message -->
+      <div class="success-banner" *ngIf="successMessage()">
+        <span class="success-text">{{ successMessage() }}</span>
+      </div>
+
       <!-- Vesting Status Section -->
       <div class="status-section">
         <h2 class="status-title">Vesting Status</h2>
