@@ -1,7 +1,7 @@
 # QLabs Vesting App
 
 This is the vesting portal for QLabs (Quantum-Resistant Tokens).
-deploy: scp -r ./dist/qlabs-vesting/browser root@5.22.221.114:/var/www/html
+deploy: scp -r ./dist/qlabs-vesting/browser/* root@5.22.221.114:/var/www/html
 
 **Live App:** [https://01-Quantum.github.io/qlabs-vesting/](https://01-Quantum.github.io/qlabs-vesting/)
 
