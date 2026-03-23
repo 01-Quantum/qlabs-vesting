@@ -13,7 +13,7 @@ export const environment = {
       symbol: 'HYPE',
       decimals: 18,
     },
-    rpcUrls: ['https://rpc.hyperliquid.xyz/evm'],
+    rpcUrls: ['https://hidden-wild-sky.hype-mainnet.quiknode.pro/0ba78cf1989512f6fc3bd1f1f6be9e393b755d13/evm'],
     blockExplorerUrls: ['https://testnet.purrsec.com/'],
   }
 };
