@@ -91,8 +91,10 @@ export class WalletService {
     // Subscribe to provider changes
     this.appKit.subscribeProviders((state: any) => {
       this.log('AppKit subscribeProviders:', state);
-      if (state.provider) {
-        this.browserProvider = new BrowserProvider(state.provider as any);
+      // AppKit v1.x usually returns providers indexed by namespace, e.g. state['eip155']
+      const provider = state?.['eip155'] || state?.provider;
+      if (provider) {
+        this.browserProvider = new BrowserProvider(provider as any);
       } else {
         this.browserProvider = null;
       }
@@ -110,6 +112,14 @@ export class WalletService {
   }
 
   public async getSigner(address?: string) {
+    if (!this.browserProvider) {
+      // Try to fetch it directly if subscription missed it
+      const rawProvider = this.appKit?.getWalletProvider();
+      if (rawProvider) {
+        this.browserProvider = new BrowserProvider(rawProvider as any);
+      }
+    }
+
     if (!this.browserProvider) throw new Error('No provider available');
 
     const target = address || this.currentAccount();
