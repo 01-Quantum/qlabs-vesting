@@ -23,9 +23,9 @@ export class ConnectComponent {
     });
   }
 
-  async connect(type: 'metamask' | 'walletconnect') {
+  async connect() {
     try {
-      await this.walletService.connectWallet(type);
+      await this.walletService.connectWallet();
       if (this.walletService.currentAccount()) {
         this.router.navigate(['/vesting']);
       }
