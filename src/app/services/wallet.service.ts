@@ -35,6 +35,7 @@ export class WalletService {
 
   private appKit: AppKit | null = null;
   private browserProvider: BrowserProvider | null = null;
+  private customNetwork: any;
 
   // ---- Logging helpers ----
   private log(...args: any[]) {
@@ -54,8 +55,7 @@ export class WalletService {
   private initAppKit() {
     this.log('initAppKit: begin');
 
-    // Map existing networkDetails to AppKit network format
-    const customNetwork: any = {
+    this.customNetwork = {
       id: Number(environment.networkDetails.chainId),
       name: environment.networkDetails.chainName,
       nativeCurrency: environment.networkDetails.nativeCurrency,
@@ -69,7 +69,7 @@ export class WalletService {
 
     this.appKit = createAppKit({
       adapters: [new EthersAdapter()],
-      networks: [mainnet, customNetwork],
+      networks: [this.customNetwork, mainnet],
       projectId: environment.walletConnectProjectId,
       allWallets: 'SHOW',
       features: {
@@ -112,6 +112,10 @@ export class WalletService {
   }
 
   public async getSigner(address?: string) {
+    if (this.appKit) {
+      await this.ensureCorrectNetwork();
+    }
+
     if (!this.browserProvider) {
       // Try to fetch it directly if subscription missed it
       const rawProvider = this.appKit?.getWalletProvider();
@@ -126,6 +130,38 @@ export class WalletService {
     this.log('getSigner: target =', target);
 
     return target ? this.browserProvider.getSigner(target) : this.browserProvider.getSigner();
+  }
+
+  public async ensureCorrectNetwork() {
+    if (!this.appKit) return;
+    
+    // AppKit returns chainId which might be number or string or CAIP-2
+    const isConnected = this.currentAccount() !== null;
+    const currentNetwork = isConnected ? this.appKit.getChainId() : null;
+    const targetChainId = Number(environment.networkDetails.chainId);
+    
+    // Handle CAIP-2 chainId (e.g. eip155:999)
+    let currentId: number | null = null;
+    if (typeof currentNetwork === 'number') {
+      currentId = currentNetwork;
+    } else if (typeof currentNetwork === 'string') {
+      if (currentNetwork.includes(':')) {
+        currentId = Number(currentNetwork.split(':')[1]);
+      } else {
+        currentId = Number(currentNetwork);
+      }
+    }
+
+    this.log('ensureCorrectNetwork: currentId =', currentId, 'targetChainId =', targetChainId);
+
+    if (currentId && currentId !== targetChainId) {
+      this.log(`ensureCorrectNetwork: switching from ${currentId} to ${targetChainId}`);
+      try {
+        await this.appKit.switchNetwork(this.customNetwork);
+      } catch (e) {
+        this.err('ensureCorrectNetwork: failed to switch network:', e);
+      }
+    }
   }
 
   // ----------------------------
