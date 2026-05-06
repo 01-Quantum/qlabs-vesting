@@ -1,0 +1,85 @@
+<div class="lookup-container">
+  <div class="lookup-card">
+    <div class="card-header">
+      <h1 class="lookup-title">Allocation Lookup</h1>
+      <p class="lookup-subtitle">Check vesting stats for any Hyperliquid address</p>
+    </div>
+
+    <div class="lookup-form">
+      <div class="input-group">
+        <input 
+          type="text" 
+          [(ngModel)]="addressInput" 
+          placeholder="0x..." 
+          class="lookup-input"
+          (keyup.enter)="performLookup()"
+        />
+        <button class="lookup-btn" (click)="performLookup()" [disabled]="isLoading()">
+          <span *ngIf="!isLoading()">Search</span>
+          <div class="spinner" *ngIf="isLoading()"></div>
+        </button>
+      </div>
+      <p class="error-msg" *ngIf="error()">{{ error() }}</p>
+    </div>
+
+    <!-- Results Section -->
+    <div class="results-section" *ngIf="stats() && !isLoading()">
+      <div class="address-header">
+        <span class="label">Stats for:</span>
+        <span class="val">{{ stats().address }}</span>
+      </div>
+
+      <div class="stats-grid">
+        <div class="stat-item">
+          <span class="stat-label">HYPE Balance</span>
+          <span class="stat-val">{{ stats().hypeBalance }} HYPE</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">qONE Balance</span>
+          <span class="stat-val">{{ stats().qoneBalance }} qONE</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Claimable Now</span>
+          <span class="stat-val highlighted">{{ stats().totalClaimable }} qONE</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Remaining</span>
+          <span class="stat-val">{{ stats().totalRemaining }} qONE</span>
+        </div>
+      </div>
+
+      <div class="initialization-status" [class.needed]="stats().initializationNeeded">
+        <div class="status-icon">
+          <svg *ngIf="!stats().initializationNeeded" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          <svg *ngIf="stats().initializationNeeded" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        </div>
+        <span class="status-text">
+          {{ stats().initializationNeeded ? 'Initialization Required' : 'Initialized on Chain' }}
+        </span>
+      </div>
+
+      <div class="allocations-list">
+        <h3>Categories</h3>
+        <div class="alloc-row" *ngFor="let alloc of stats().allocations">
+          <div class="alloc-info">
+            <span class="alloc-name">{{ alloc.name }}</span>
+            <span class="alloc-percent">{{ alloc.percentage }}% Vested</span>
+          </div>
+          <div class="progress-bar">
+            <div class="progress-fill" [style.width.%]="alloc.percentage"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button class="back-link" routerLink="/">Back to Portal</button>
+      </div>
+    </div>
+
+    <!-- Empty state -->
+    <div class="empty-state" *ngIf="!stats() && !isLoading() && !error()">
+      <div class="empty-icon">🔍</div>
+      <p>Enter an address to see vesting details</p>
+    </div>
+  </div>
+</div>

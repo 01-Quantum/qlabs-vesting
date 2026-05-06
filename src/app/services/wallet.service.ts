@@ -248,6 +248,29 @@ export class WalletService {
     }
   }
 
+  public async getBalances(address: string) {
+    try {
+      const [hypeBal, qoneBal] = await Promise.all([
+        this.rpcProvider.getBalance(address),
+        (async () => {
+          const contract = new Contract(environment.coinAddress, ERC20_ABI, this.rpcProvider);
+          const [bal, decimals] = await Promise.all([
+            contract['balanceOf'](address),
+            contract['decimals'](),
+          ]);
+          return formatUnits(bal, decimals);
+        })()
+      ]);
+      return {
+        hype: formatEther(hypeBal),
+        qone: qoneBal
+      };
+    } catch (e) {
+      this.err('getBalances: error:', e);
+      return { hype: '0', qone: '0' };
+    }
+  }
+
   private async fetchQoneBalance(address: string) {
     this.log('fetchQoneBalance: begin');
     try {

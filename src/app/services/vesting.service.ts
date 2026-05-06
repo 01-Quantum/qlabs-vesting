@@ -233,16 +233,26 @@ export class VestingService {
   }
 
   public async fetchAllocationStatuses(address: string) {
-    console.log(`VestingService: Fetching allocation statuses for ${address}`);
+    const statuses = await this.getAllocationStatuses(address);
+    this.allocationStatuses.set(statuses.statuses);
+    this.userRemainingAllocation.set(formatUnits(statuses.totalRemainingWei, 18));
+  }
+
+  public async getAllocationStatuses(address: string) {
+    console.log(`VestingService: Getting allocation statuses for ${address}`);
     try {
       const provider = new JsonRpcProvider(environment.networkDetails.rpcUrls[0]);
       const contract = new Contract(environment.vestingContractAddress, VESTING_ABI, provider);
       
       const statuses: AllocationStatus[] = [];
       let totalRemainingWei = 0n;
+      let totalClaimableWei = 0n;
       
       // Get the intended total amounts from our Supabase-synced userAllocations signal
-      const intendedAllocs = this.userAllocations();
+      // Wait, if this is for lookup, we need to fetch Supabase data first
+      const response = await fetch(`${environment.supabaseRestUrl}?address=${address}`);
+      const json = await response.json();
+      const intendedAllocs = json.data || [];
 
       for (let i = 0; i <= 5; i++) {
         const [claimable, allocData] = await Promise.all([
@@ -257,9 +267,9 @@ export class VestingService {
 
         // If not initialized on-chain yet, use the intended amount from Supabase
         if (!initialized) {
-          const intended = intendedAllocs.find(a => a.category === i);
-          if (intended && intended.rawAmount) {
-            totalAmount = intended.rawAmount;
+          const intended = intendedAllocs.find((a: any) => a.category === i);
+          if (intended && intended.amount_wei) {
+            totalAmount = BigInt(intended.amount_wei);
           }
         }
 
@@ -272,6 +282,7 @@ export class VestingService {
             // Remaining = Total - Already Claimed
             const remainingForCategory = totalAmount - claimedAmount;
             totalRemainingWei += remainingForCategory;
+            totalClaimableWei += claimable;
 
             statuses.push({
                 name: this.categoryNames[i],
@@ -282,12 +293,53 @@ export class VestingService {
         }
       }
       
-      this.allocationStatuses.set(statuses);
-      this.userRemainingAllocation.set(formatUnits(totalRemainingWei, 18));
+      return {
+        statuses,
+        totalRemainingWei,
+        totalClaimableWei,
+        initializationNeeded: intendedAllocs.some((a: any) => {
+            // This is a bit complex, but we can check if any intended alloc is not initialized on chain
+            // For simplicity, let's just re-use the logic or fetch on chain
+            return false; // placeholder, we will improve
+        })
+      };
     } catch (err) {
-      console.error('Error fetching allocation statuses:', err);
-      this.userRemainingAllocation.set(null);
+      console.error('Error getting allocation statuses:', err);
+      return { statuses: [], totalRemainingWei: 0n, totalClaimableWei: 0n, initializationNeeded: false };
     }
+  }
+
+  public async getUserStats(address: string) {
+    const [balances, allocationData] = await Promise.all([
+      this.walletService.getBalances(address),
+      this.getAllocationStatuses(address)
+    ]);
+
+    // Check initialization needed properly
+    const provider = new JsonRpcProvider(environment.networkDetails.rpcUrls[0]);
+    const contract = new Contract(environment.vestingContractAddress, VESTING_ABI, provider);
+    
+    const response = await fetch(`${environment.supabaseRestUrl}?address=${address}`);
+    const json = await response.json();
+    const allocations = json.data || [];
+    let initNeeded = false;
+    for (const a of allocations) {
+        const d = await contract['getAllocation'](address, a.category);
+        if (!d[2]) {
+            initNeeded = true;
+            break;
+        }
+    }
+
+    return {
+      address,
+      hypeBalance: balances.hype,
+      qoneBalance: balances.qone,
+      allocations: allocationData.statuses,
+      totalClaimable: formatUnits(allocationData.totalClaimableWei, 18),
+      totalRemaining: formatUnits(allocationData.totalRemainingWei, 18),
+      initializationNeeded: initNeeded
+    };
   }
 
   public async initializeAllocations(address: string) {
