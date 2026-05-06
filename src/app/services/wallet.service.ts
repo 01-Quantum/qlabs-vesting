@@ -202,6 +202,49 @@ export class WalletService {
     }
   }
 
+  public async connectMetaMask() {
+    this.log('connectMetaMask: begin');
+    this.isConnecting.set(true);
+    this.error.set(null);
+
+    const ethereum = (window as any).ethereum;
+
+    if (!ethereum) {
+      this.warn('connectMetaMask: No injected provider found');
+      this.error.set('MetaMask not found. Please install the extension.');
+      this.isConnecting.set(false);
+      return;
+    }
+
+    try {
+      // If multiple providers are injected, try to find MetaMask
+      let provider = ethereum;
+      if (ethereum.providers) {
+        provider = ethereum.providers.find((p: any) => p.isMetaMask) || ethereum;
+      }
+
+      this.log('connectMetaMask: requesting accounts');
+      const accounts = await provider.request({ method: 'eth_requestAccounts' });
+      
+      this.log('connectMetaMask: accounts received:', accounts);
+      if (accounts && accounts.length > 0) {
+        // AppKit's subscribeAccount should pick this up, 
+        // but we can also trigger handleAccountsChanged manually for immediate response
+        await this.handleAccountsChanged(accounts);
+      }
+    } catch (e: any) {
+      this.err('connectMetaMask: error:', e);
+      if (e.code === 4001) {
+        this.error.set('Connection request was rejected');
+      } else {
+        this.error.set(e?.message || 'Failed to connect to MetaMask');
+      }
+    } finally {
+      this.isConnecting.set(false);
+      this.log('connectMetaMask: done');
+    }
+  }
+
   // ----------------------------
   // Session + account handling
   // ----------------------------

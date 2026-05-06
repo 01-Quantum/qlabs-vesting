@@ -33,5 +33,16 @@ export class ConnectComponent {
       console.error('Connection failed', error);
     }
   }
+
+  async connectMetaMask() {
+    try {
+      await this.walletService.connectMetaMask();
+      if (this.walletService.currentAccount()) {
+        this.router.navigate(['/vesting']);
+      }
+    } catch (error) {
+      console.error('MetaMask connection failed', error);
+    }
+  }
 }
 

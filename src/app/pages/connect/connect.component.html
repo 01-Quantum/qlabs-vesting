@@ -13,8 +13,14 @@
       </h1>
 
       <div class="buttons">
+        <button (click)="connectMetaMask()" class="metamask-btn">
+          <div class="icon metamask"></div>
+          <span>Connect MetaMask</span>
+        </button>
+
         <button (click)="connect()" class="connect-btn">
-          <span>Connect Wallet</span>
+          <div class="icon walletconnect"></div>
+          <span>Other Wallets</span>
         </button>
       </div>
 
