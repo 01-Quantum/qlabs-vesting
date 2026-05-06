@@ -79,9 +79,25 @@ export class WalletService {
     });
 
     // Subscribe to account changes
-    this.appKit.subscribeAccount((state) => {
+    this.appKit.subscribeAccount(async (state) => {
       this.log('AppKit subscribeAccount:', state);
       if (state.isConnected && state.address) {
+        // Try to get all accounts from the provider directly
+        try {
+          const provider = this.appKit?.getWalletProvider() as any;
+          if (provider?.request) {
+            const allAccounts = await provider.request({ method: 'eth_accounts' });
+            this.log('AppKit eth_accounts:', allAccounts);
+            if (Array.isArray(allAccounts) && allAccounts.length > 0) {
+              this.handleAccountsChanged(allAccounts);
+              return;
+            }
+          }
+        } catch (e) {
+          this.err('Failed to fetch all accounts from provider:', e);
+        }
+        
+        // Fallback to the single address from state
         this.handleAccountsChanged([state.address]);
       } else {
         this.handleAccountsChanged([]);
