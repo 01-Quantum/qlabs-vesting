@@ -133,10 +133,16 @@ export class WalletService {
     }
 
     if (!this.browserProvider) {
-      // Try to fetch it directly if subscription missed it
+      // 1. Try to fetch from AppKit directly
       const rawProvider = this.appKit?.getWalletProvider();
       if (rawProvider) {
+        this.log('getSigner: recovered provider from AppKit');
         this.browserProvider = new BrowserProvider(rawProvider as any);
+      } 
+      // 2. Fallback to injected window.ethereum
+      else if ((window as any).ethereum) {
+        this.log('getSigner: fallback to window.ethereum');
+        this.browserProvider = new BrowserProvider((window as any).ethereum as any);
       }
     }
 
@@ -158,14 +164,22 @@ export class WalletService {
     
     // Handle CAIP-2 chainId (e.g. eip155:999)
     let currentId: number | null = null;
-    if (typeof currentNetwork === 'number') {
-      currentId = currentNetwork;
-    } else if (typeof currentNetwork === 'string') {
-      if (currentNetwork.includes(':')) {
-        currentId = Number(currentNetwork.split(':')[1]);
-      } else {
-        currentId = Number(currentNetwork);
+
+    if (this.browserProvider) {
+      const net = await this.browserProvider.getNetwork();
+      currentId = Number(net.chainId);
+      this.log('ensureCorrectNetwork: from browserProvider currentId =', currentId);
+    } else if (currentNetwork) {
+      if (typeof currentNetwork === 'number') {
+        currentId = currentNetwork;
+      } else if (typeof currentNetwork === 'string') {
+        if (currentNetwork.includes(':')) {
+          currentId = Number(currentNetwork.split(':')[1]);
+        } else {
+          currentId = Number(currentNetwork);
+        }
       }
+      this.log('ensureCorrectNetwork: from AppKit currentId =', currentId);
     }
 
     this.log('ensureCorrectNetwork: currentId =', currentId, 'targetChainId =', targetChainId);
@@ -228,6 +242,9 @@ export class WalletService {
       
       this.log('connectMetaMask: accounts received:', accounts);
       if (accounts && accounts.length > 0) {
+        // Initialize browserProvider for manual MetaMask connection
+        this.browserProvider = new BrowserProvider(provider as any);
+        
         // AppKit's subscribeAccount should pick this up, 
         // but we can also trigger handleAccountsChanged manually for immediate response
         await this.handleAccountsChanged(accounts);
@@ -392,6 +409,7 @@ export class WalletService {
 
     this.currentAccount.set(null);
     this.accounts.set([]);
+    this.browserProvider = null;
     this.resetBalances();
     this.log('disconnectWallet: done');
   }
