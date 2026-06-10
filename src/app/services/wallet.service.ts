@@ -214,10 +214,43 @@ export class WalletService {
 
     if (!this.browserProvider) throw new Error('No provider available');
 
-    const target = address || this.currentAccount();
-    this.log('getSigner: target =', target);
+    const target = (address || this.currentAccount())?.toLowerCase();
+    if (!target) throw new Error('No wallet account selected');
 
-    return target ? this.browserProvider.getSigner(target) : this.browserProvider.getSigner();
+    const authorized = await this.getAuthorizedAccounts();
+    if (!authorized.map((a) => a.toLowerCase()).includes(target)) {
+      throw new Error(
+        'The selected account is not authorized in your wallet. Reconnect or pick an authorized account.',
+      );
+    }
+
+    this.log('getSigner: target =', target);
+    const signer = await this.browserProvider.getSigner(target);
+    const signerAddress = (await signer.getAddress()).toLowerCase();
+
+    if (signerAddress !== target) {
+      throw new Error(
+        `Wallet is using ${signerAddress} but ${target} was selected. Switch to that account in MetaMask and try again.`,
+      );
+    }
+
+    return signer;
+  }
+
+  private async getAuthorizedAccounts(): Promise<string[]> {
+    const eip1193 = this.getInjectedRequestProvider();
+    if (eip1193) {
+      try {
+        const accounts = await eip1193.request({ method: 'eth_accounts' });
+        if (Array.isArray(accounts) && accounts.length > 0) {
+          return accounts as string[];
+        }
+      } catch (e) {
+        this.warn('getAuthorizedAccounts: eth_accounts failed', e);
+      }
+    }
+
+    return this.accounts();
   }
 
   private async ensureCorrectNetworkOnConnect(context: string): Promise<void> {

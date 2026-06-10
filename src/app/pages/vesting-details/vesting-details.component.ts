@@ -19,9 +19,15 @@ export class VestingDetailsComponent {
   constructor() {
     effect(() => {
       const account = this.walletService.currentAccount();
-      if (account) {
-        this.vestingService.fetchClaimableAmount(account);
+      if (!account) {
+        void this.walletService.ready.then(() => {
+          if (!this.walletService.currentAccount()) {
+            this.router.navigate(['/']);
+          }
+        });
+        return;
       }
+      this.vestingService.fetchClaimableAmount(account);
     });
   }
 
