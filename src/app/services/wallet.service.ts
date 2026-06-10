@@ -25,6 +25,12 @@ export class WalletService {
   public accounts: WritableSignal<string[]> = signal([]);
   public isConnecting: WritableSignal<boolean> = signal(false);
   public error: WritableSignal<string | null> = signal(null);
+  /**
+   * True whenever we believe a wallet session may exist (injected or AppKit).
+   * Drives the header's Disconnect button so users can always recover, even
+   * if `accounts` got cleared while the underlying provider is still alive.
+   */
+  public hasSession: WritableSignal<boolean> = signal(false);
 
   public hypeBalance: WritableSignal<string | null> = signal(null);
   public qoneBalance: WritableSignal<string | null> = signal(null);
@@ -37,6 +43,17 @@ export class WalletService {
   private browserProvider: BrowserProvider | null = null;
   private customNetwork: any;
   private listenedProvider: any = null;
+  /**
+   * Which path produced the current connection. `null` when nothing is
+   * connected. Used to ignore spurious AppKit "disconnected" emissions for
+   * sessions that were actually established via the injected MetaMask path.
+   */
+  private connectionSource: 'appkit' | 'injected' | null = null;
+
+  private setConnectionSource(source: 'appkit' | 'injected' | null): void {
+    this.connectionSource = source;
+    this.hasSession.set(source !== null);
+  }
 
   // ---- Logging helpers ----
   private log(...args: any[]) {
@@ -49,8 +66,48 @@ export class WalletService {
     console.error(`[WalletService ${new Date().toISOString()}]`, ...args);
   }
 
+  /**
+   * Resolves after the initial session restore attempt completes. Guards
+   * (e.g. wallet-connected route guard) `await` this before checking
+   * `hasSession()` so they don't redirect during the brief window between
+   * app boot and `eth_accounts` returning the prior MetaMask authorization.
+   */
+  public readonly ready: Promise<void>;
+
   constructor() {
     this.initAppKit();
+    this.ready = this.restoreInjectedSession();
+  }
+
+  /**
+   * On page reload `connectMetaMask` history is lost (we don't go through
+   * AppKit's persistence), but the MetaMask extension may still remember the
+   * dApp from a prior session. `eth_accounts` returns the authorized accounts
+   * without prompting, so we can re-emit them and rehydrate `currentAccount`.
+   */
+  private async restoreInjectedSession(): Promise<void> {
+    const ethereum = (window as any).ethereum;
+    if (!ethereum?.request) return;
+
+    try {
+      let provider = ethereum;
+      if (Array.isArray(ethereum.providers) && ethereum.providers.length) {
+        provider = ethereum.providers.find((p: any) => p.isMetaMask) || ethereum;
+      }
+
+      const accounts: string[] = await provider.request({ method: 'eth_accounts' });
+      this.log('restoreInjectedSession: eth_accounts =', accounts);
+
+      if (accounts?.length > 0) {
+        this.setConnectionSource('injected');
+        this.browserProvider = new BrowserProvider(provider as any);
+        this.attachProviderListeners(provider);
+        await this.handleAccountsChanged(accounts);
+        await this.ensureCorrectNetworkOnConnect('restoreInjectedSession');
+      }
+    } catch (e) {
+      this.warn('restoreInjectedSession: failed', e);
+    }
   }
 
   private initAppKit() {
@@ -79,46 +136,50 @@ export class WalletService {
       }
     });
 
-    // Subscribe to account changes
     this.appKit.subscribeAccount(async (state) => {
       this.log('AppKit subscribeAccount:', state);
       if (state.isConnected && state.address) {
-        // Try to get all accounts from the provider directly
+        this.setConnectionSource('appkit');
+        const provider = this.appKit?.getWalletProvider() as any;
+        if (provider) {
+          this.browserProvider = new BrowserProvider(provider as any);
+          this.attachProviderListeners(provider);
+        }
+
         try {
-          const provider = this.appKit?.getWalletProvider() as any;
           if (provider?.request) {
             const allAccounts = await provider.request({ method: 'eth_accounts' });
             this.log('AppKit eth_accounts:', allAccounts);
             if (Array.isArray(allAccounts) && allAccounts.length > 0) {
-              this.handleAccountsChanged(allAccounts);
+              await this.handleAccountsChanged(allAccounts);
+              await this.ensureCorrectNetworkOnConnect('AppKit subscribeAccount');
               return;
             }
           }
         } catch (e) {
           this.err('Failed to fetch all accounts from provider:', e);
         }
-        
-        // Fallback to the single address from state
-        this.handleAccountsChanged([state.address]);
+
+        await this.handleAccountsChanged([state.address]);
+        await this.ensureCorrectNetworkOnConnect('AppKit subscribeAccount');
+        return;
+      }
+
+      if (this.connectionSource === 'appkit') {
+        this.setConnectionSource(null);
+        await this.handleAccountsChanged([]);
       } else {
-        // AppKit can briefly report disconnected during network switches or txs.
-        // Confirm with the wallet before clearing the local session.
-        const stillConnected = await this.verifyProviderAccounts();
-        if (!stillConnected) {
-          this.handleAccountsChanged([]);
-        }
+        this.log('AppKit subscribeAccount: ignoring disconnect (source =', this.connectionSource, ')');
       }
     });
 
-    // Subscribe to provider changes
     this.appKit.subscribeProviders((state: any) => {
       this.log('AppKit subscribeProviders:', state);
-      // AppKit v1.x usually returns providers indexed by namespace, e.g. state['eip155']
       const provider = state?.['eip155'] || state?.provider;
       if (provider) {
         this.browserProvider = new BrowserProvider(provider as any);
         this.attachProviderListeners(provider);
-      } else if (!this.currentAccount()) {
+      } else if (this.connectionSource !== 'injected') {
         this.browserProvider = null;
       }
     });
@@ -135,21 +196,19 @@ export class WalletService {
   }
 
   public async getSigner(address?: string) {
-    if (this.appKit) {
-      await this.ensureCorrectNetwork();
-    }
+    await this.ensureCorrectNetwork();
 
     if (!this.browserProvider) {
-      // 1. Try to fetch from AppKit directly
       const rawProvider = this.appKit?.getWalletProvider();
       if (rawProvider) {
         this.log('getSigner: recovered provider from AppKit');
         this.browserProvider = new BrowserProvider(rawProvider as any);
-      } 
-      // 2. Fallback to injected window.ethereum
-      else if ((window as any).ethereum) {
+      } else if ((window as any).ethereum) {
         this.log('getSigner: fallback to window.ethereum');
-        this.browserProvider = new BrowserProvider((window as any).ethereum as any);
+        const injected = this.getInjectedRequestProvider();
+        if (injected) {
+          this.browserProvider = new BrowserProvider(injected as any);
+        }
       }
     }
 
@@ -161,15 +220,22 @@ export class WalletService {
     return target ? this.browserProvider.getSigner(target) : this.browserProvider.getSigner();
   }
 
+  private async ensureCorrectNetworkOnConnect(context: string): Promise<void> {
+    try {
+      await this.ensureCorrectNetwork();
+    } catch (e: any) {
+      this.warn(`${context}: ensureCorrectNetwork failed`, e);
+      this.error.set(
+        e?.message ?? `Please switch your wallet to ${environment.networkDetails.chainName}.`,
+      );
+    }
+  }
+
   public async ensureCorrectNetwork() {
-    if (!this.appKit) return;
-    
-    // AppKit returns chainId which might be number or string or CAIP-2
     const isConnected = this.currentAccount() !== null;
-    const currentNetwork = isConnected ? this.appKit.getChainId() : null;
+    const currentNetwork = isConnected ? this.appKit?.getChainId() : null;
     const targetChainId = Number(environment.networkDetails.chainId);
-    
-    // Handle CAIP-2 chainId (e.g. eip155:999)
+
     let currentId: number | null = null;
 
     if (this.browserProvider) {
@@ -180,11 +246,9 @@ export class WalletService {
       if (typeof currentNetwork === 'number') {
         currentId = currentNetwork;
       } else if (typeof currentNetwork === 'string') {
-        if (currentNetwork.includes(':')) {
-          currentId = Number(currentNetwork.split(':')[1]);
-        } else {
-          currentId = Number(currentNetwork);
-        }
+        currentId = currentNetwork.includes(':')
+          ? Number(currentNetwork.split(':')[1])
+          : Number(currentNetwork);
       }
       this.log('ensureCorrectNetwork: from AppKit currentId =', currentId);
     }
@@ -192,13 +256,89 @@ export class WalletService {
     this.log('ensureCorrectNetwork: currentId =', currentId, 'targetChainId =', targetChainId);
 
     if (currentId && currentId !== targetChainId) {
-      this.log(`ensureCorrectNetwork: switching from ${currentId} to ${targetChainId}`);
-      try {
-        await this.appKit.switchNetwork(this.customNetwork);
-      } catch (e) {
-        this.err('ensureCorrectNetwork: failed to switch network:', e);
+      this.warn(
+        `ensureCorrectNetwork: wallet is on ${currentId}; configured chain is ${targetChainId}; attempting switch`,
+      );
+      await this.switchToConfiguredNetwork();
+    }
+  }
+
+  /**
+   * Prompt the wallet to switch to `environment.networkDetails`. Uses
+   * EIP-3326 `wallet_switchEthereumChain` and, when the chain is unknown to
+   * the wallet (MetaMask error 4902), falls back to EIP-3085
+   * `wallet_addEthereumChain`.
+   */
+  public async switchToConfiguredNetwork(): Promise<void> {
+    const target = environment.networkDetails;
+    const chainIdHex = normalizeChainIdHex(target.chainId);
+
+    const eip1193 = this.getInjectedRequestProvider();
+    if (!eip1193) {
+      throw new Error(
+        `Wrong wallet network. Switch your wallet to ${target.chainName} (chainId ${chainIdHex}) and try again.`,
+      );
+    }
+
+    try {
+      this.log('switchToConfiguredNetwork: wallet_switchEthereumChain', chainIdHex);
+      await eip1193.request({
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: chainIdHex }],
+      });
+    } catch (switchError: any) {
+      const code = switchError?.code ?? switchError?.data?.originalError?.code;
+      this.warn('switchToConfiguredNetwork: switch failed', code, switchError);
+      if (code === 4902 || code === -32603) {
+        this.log('switchToConfiguredNetwork: chain unknown — adding via wallet_addEthereumChain');
+        try {
+          await eip1193.request({
+            method: 'wallet_addEthereumChain',
+            params: [
+              {
+                chainId: chainIdHex,
+                chainName: target.chainName,
+                nativeCurrency: target.nativeCurrency,
+                rpcUrls: target.rpcUrls,
+                blockExplorerUrls: target.blockExplorerUrls,
+              },
+            ],
+          });
+        } catch (addError: any) {
+          this.err('switchToConfiguredNetwork: add failed', addError);
+          throw new Error(
+            `Could not add ${target.chainName} (chainId ${chainIdHex}) to your wallet: ` +
+              `${addError?.message ?? 'request was rejected'}.`,
+          );
+        }
+      } else if (code === 4001) {
+        throw new Error(`Network switch was rejected. Please switch your wallet to ${target.chainName}.`);
+      } else {
+        throw new Error(
+          `Could not switch wallet to ${target.chainName} (chainId ${chainIdHex}): ` +
+            `${switchError?.message ?? 'request failed'}.`,
+        );
       }
     }
+
+    this.browserProvider = new BrowserProvider(eip1193 as any);
+  }
+
+  private getInjectedRequestProvider(): { request: (args: { method: string; params?: unknown[] }) => Promise<unknown> } | null {
+    if (this.connectionSource === 'appkit') {
+      const appkitProvider = this.appKit?.getWalletProvider() as any;
+      if (appkitProvider?.request) return appkitProvider;
+    }
+
+    const ethereum = (window as any).ethereum;
+    if (!ethereum?.request) return null;
+
+    if (Array.isArray(ethereum.providers) && ethereum.providers.length) {
+      const mm = ethereum.providers.find((p: any) => p.isMetaMask);
+      if (mm?.request) return mm;
+    }
+
+    return ethereum;
   }
 
   // ----------------------------
@@ -238,7 +378,6 @@ export class WalletService {
     }
 
     try {
-      // If multiple providers are injected, try to find MetaMask
       let provider = ethereum;
       if (ethereum.providers) {
         provider = ethereum.providers.find((p: any) => p.isMetaMask) || ethereum;
@@ -246,12 +385,14 @@ export class WalletService {
 
       this.log('connectMetaMask: requesting accounts');
       const accounts = await provider.request({ method: 'eth_requestAccounts' });
-      
+
       this.log('connectMetaMask: accounts received:', accounts);
       if (accounts && accounts.length > 0) {
+        this.setConnectionSource('injected');
         this.browserProvider = new BrowserProvider(provider as any);
         this.attachProviderListeners(provider);
         await this.handleAccountsChanged(accounts);
+        await this.ensureCorrectNetworkOnConnect('connectMetaMask');
       }
     } catch (e: any) {
       this.err('connectMetaMask: error:', e);
@@ -280,48 +421,13 @@ export class WalletService {
       void this.handleAccountsChanged(accounts);
     });
 
-    provider.on('disconnect', () => {
-      this.log('provider disconnect event');
-      void this.verifyProviderAccounts().then((stillConnected) => {
-        if (!stillConnected) {
-          void this.handleAccountsChanged([]);
-        }
-      });
+    provider.on('chainChanged', () => {
+      this.log('provider chainChanged');
+      const eip1193 = this.getInjectedRequestProvider();
+      if (eip1193) {
+        this.browserProvider = new BrowserProvider(eip1193 as any);
+      }
     });
-  }
-
-  private async verifyProviderAccounts(): Promise<boolean> {
-    const appKitProvider = this.appKit?.getWalletProvider() as any;
-    if (appKitProvider?.request) {
-      try {
-        const accounts = await appKitProvider.request({ method: 'eth_accounts' });
-        if (Array.isArray(accounts) && accounts.length > 0) {
-          this.browserProvider = new BrowserProvider(appKitProvider);
-          this.attachProviderListeners(appKitProvider);
-          await this.handleAccountsChanged(accounts);
-          return true;
-        }
-      } catch (e) {
-        this.err('verifyProviderAccounts: AppKit provider check failed:', e);
-      }
-    }
-
-    const metamask = this.getMetaMaskProvider();
-    if (metamask?.request) {
-      try {
-        const accounts = await metamask.request({ method: 'eth_accounts' });
-        if (Array.isArray(accounts) && accounts.length > 0) {
-          this.browserProvider = new BrowserProvider(metamask);
-          this.attachProviderListeners(metamask);
-          await this.handleAccountsChanged(accounts);
-          return true;
-        }
-      } catch (e) {
-        this.err('verifyProviderAccounts: MetaMask provider check failed:', e);
-      }
-    }
-
-    return false;
   }
 
   private async handleAccountsChanged(accounts: string[]) {
@@ -342,7 +448,6 @@ export class WalletService {
       return;
     }
 
-    // Disconnected
     this.warn('handleAccountsChanged: disconnected (0 accounts)');
     this.currentAccount.set(null);
     this.resetBalances();
@@ -454,21 +559,24 @@ export class WalletService {
     }
   }
 
-  
-  private getMetaMaskProvider(): any | null {
-    const ethereum = (window as any).ethereum;
-  
-    if (!ethereum) return null;
-  
-    if (ethereum.providers?.length) {
-      return ethereum.providers.find((p: any) => p.isMetaMask) || null;
-    }
-  
-    return ethereum.isMetaMask ? ethereum : null;
-  }
-
-  public async disconnectWallet() {
+  public async disconnectWallet(): Promise<void> {
     this.log('disconnectWallet: begin');
+
+    const wasInjected = this.connectionSource === 'injected';
+    if (wasInjected) {
+      const eip1193 = this.getInjectedRequestProvider();
+      if (eip1193) {
+        try {
+          this.log('disconnectWallet: wallet_revokePermissions(eth_accounts)');
+          await eip1193.request({
+            method: 'wallet_revokePermissions',
+            params: [{ eth_accounts: {} }],
+          });
+        } catch (e) {
+          this.warn('disconnectWallet: wallet_revokePermissions unsupported or rejected:', e);
+        }
+      }
+    }
 
     if (this.appKit) {
       try {
@@ -478,18 +586,7 @@ export class WalletService {
       }
     }
 
-    const provider = this.getMetaMaskProvider();
-    if (provider?.request) {
-      try {
-        await provider.request({
-          method: 'wallet_revokePermissions',
-          params: [{ eth_accounts: {} }],
-        });
-        this.log('disconnectWallet: MetaMask eth_accounts permission revoked');
-      } catch (e: any) {
-        this.warn('disconnectWallet: wallet_revokePermissions failed:', e);
-      }
-    }
+    this.setConnectionSource(null);
     this.currentAccount.set(null);
     this.accounts.set([]);
     this.browserProvider = null;
@@ -498,7 +595,7 @@ export class WalletService {
     this.log('disconnectWallet: done');
   }
 
-  public switchAccount(address: string) {
+  public switchAccount(address: string): void {
     this.log('switchAccount:', address);
     if (this.accounts().includes(address)) {
       this.currentAccount.set(address);
@@ -519,4 +616,12 @@ export class WalletService {
     this.hypeBalance.set(null);
     this.qoneBalance.set(null);
   }
+}
+
+/** Convert an `0x…`/decimal chain id (string or number) to the canonical `0x` hex MetaMask expects. */
+function normalizeChainIdHex(chainId: string | number): string {
+  if (typeof chainId === 'number') return `0x${chainId.toString(16)}`;
+  const trimmed = chainId.trim();
+  if (trimmed.toLowerCase().startsWith('0x')) return trimmed.toLowerCase();
+  return `0x${Number(trimmed).toString(16)}`;
 }

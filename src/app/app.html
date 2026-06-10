@@ -5,7 +5,7 @@
       <span class="qone-text">qONE</span>
       
       <!-- Wallet Info (Visible only when connected) -->
-      <div class="header-wallet-section" *ngIf="walletService.currentAccount()">
+      <div class="header-wallet-section" *ngIf="walletService.currentAccount() || walletService.hasSession()">
         <div class="wallet-selector-container">
           <div class="wallet-dropdown-trigger" (click)="toggleWalletDropdown()" [class.open]="showWalletDropdown">
             <div class="wallet-icon-circle">

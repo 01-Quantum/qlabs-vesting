@@ -15,7 +15,13 @@ export class ConnectComponent {
   private router = inject(Router);
 
   constructor() {
-    // If we're already connected, go to vesting page
+    // Wait for injected-session restore before auto-redirecting on reload.
+    void this.walletService.ready.then(() => {
+      if (this.walletService.currentAccount()) {
+        this.router.navigate(['/vesting']);
+      }
+    });
+
     effect(() => {
       if (this.walletService.currentAccount()) {
         this.router.navigate(['/vesting']);
