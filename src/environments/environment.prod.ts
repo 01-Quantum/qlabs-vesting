@@ -7,7 +7,7 @@ export const environment = {
   walletConnectProjectId: '051e4ff495bf3f36a63792e87bf4ba7e',
   networkDetails: {
     chainId: '0x3E7',
-    chainName: 'Hyperliquid TestNet',
+    chainName: 'Hyperliquid',
     nativeCurrency: {
       name: 'HYPE',
       symbol: 'HYPE',
