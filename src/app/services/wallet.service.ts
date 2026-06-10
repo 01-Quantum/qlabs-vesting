@@ -36,6 +36,7 @@ export class WalletService {
   private appKit: AppKit | null = null;
   private browserProvider: BrowserProvider | null = null;
   private customNetwork: any;
+  private listenedProvider: any = null;
 
   // ---- Logging helpers ----
   private log(...args: any[]) {
@@ -100,7 +101,12 @@ export class WalletService {
         // Fallback to the single address from state
         this.handleAccountsChanged([state.address]);
       } else {
-        this.handleAccountsChanged([]);
+        // AppKit can briefly report disconnected during network switches or txs.
+        // Confirm with the wallet before clearing the local session.
+        const stillConnected = await this.verifyProviderAccounts();
+        if (!stillConnected) {
+          this.handleAccountsChanged([]);
+        }
       }
     });
 
@@ -111,7 +117,8 @@ export class WalletService {
       const provider = state?.['eip155'] || state?.provider;
       if (provider) {
         this.browserProvider = new BrowserProvider(provider as any);
-      } else {
+        this.attachProviderListeners(provider);
+      } else if (!this.currentAccount()) {
         this.browserProvider = null;
       }
     });
@@ -242,11 +249,8 @@ export class WalletService {
       
       this.log('connectMetaMask: accounts received:', accounts);
       if (accounts && accounts.length > 0) {
-        // Initialize browserProvider for manual MetaMask connection
         this.browserProvider = new BrowserProvider(provider as any);
-        
-        // AppKit's subscribeAccount should pick this up, 
-        // but we can also trigger handleAccountsChanged manually for immediate response
+        this.attachProviderListeners(provider);
         await this.handleAccountsChanged(accounts);
       }
     } catch (e: any) {
@@ -265,6 +269,60 @@ export class WalletService {
   // ----------------------------
   // Session + account handling
   // ----------------------------
+
+  private attachProviderListeners(provider: any) {
+    if (!provider?.on || provider === this.listenedProvider) return;
+
+    this.listenedProvider = provider;
+
+    provider.on('accountsChanged', (accounts: string[]) => {
+      this.log('provider accountsChanged:', accounts);
+      void this.handleAccountsChanged(accounts);
+    });
+
+    provider.on('disconnect', () => {
+      this.log('provider disconnect event');
+      void this.verifyProviderAccounts().then((stillConnected) => {
+        if (!stillConnected) {
+          void this.handleAccountsChanged([]);
+        }
+      });
+    });
+  }
+
+  private async verifyProviderAccounts(): Promise<boolean> {
+    const appKitProvider = this.appKit?.getWalletProvider() as any;
+    if (appKitProvider?.request) {
+      try {
+        const accounts = await appKitProvider.request({ method: 'eth_accounts' });
+        if (Array.isArray(accounts) && accounts.length > 0) {
+          this.browserProvider = new BrowserProvider(appKitProvider);
+          this.attachProviderListeners(appKitProvider);
+          await this.handleAccountsChanged(accounts);
+          return true;
+        }
+      } catch (e) {
+        this.err('verifyProviderAccounts: AppKit provider check failed:', e);
+      }
+    }
+
+    const metamask = this.getMetaMaskProvider();
+    if (metamask?.request) {
+      try {
+        const accounts = await metamask.request({ method: 'eth_accounts' });
+        if (Array.isArray(accounts) && accounts.length > 0) {
+          this.browserProvider = new BrowserProvider(metamask);
+          this.attachProviderListeners(metamask);
+          await this.handleAccountsChanged(accounts);
+          return true;
+        }
+      } catch (e) {
+        this.err('verifyProviderAccounts: MetaMask provider check failed:', e);
+      }
+    }
+
+    return false;
+  }
 
   private async handleAccountsChanged(accounts: string[]) {
     this.log('handleAccountsChanged:', accounts);
@@ -421,28 +479,21 @@ export class WalletService {
     }
 
     const provider = this.getMetaMaskProvider();
-
-  if (provider?.request) {
-    try {
-      await provider.request({
-        method: 'wallet_revokePermissions',
-        params: [
-          {
-            eth_accounts: {},
-          },
-        ],
-      });
-
-      this.log('disconnectWallet: MetaMask eth_accounts permission revoked');
-    } catch (e: any) {
-      // Some wallets do not support this method.
-      // MetaMask extension supports it, but keep graceful fallback.
-      this.warn('disconnectWallet: wallet_revokePermissions failed:', e);
+    if (provider?.request) {
+      try {
+        await provider.request({
+          method: 'wallet_revokePermissions',
+          params: [{ eth_accounts: {} }],
+        });
+        this.log('disconnectWallet: MetaMask eth_accounts permission revoked');
+      } catch (e: any) {
+        this.warn('disconnectWallet: wallet_revokePermissions failed:', e);
+      }
     }
-  }
     this.currentAccount.set(null);
     this.accounts.set([]);
     this.browserProvider = null;
+    this.listenedProvider = null;
     this.resetBalances();
     this.log('disconnectWallet: done');
   }

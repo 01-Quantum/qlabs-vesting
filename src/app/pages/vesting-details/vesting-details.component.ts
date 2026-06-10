@@ -19,15 +19,15 @@ export class VestingDetailsComponent {
   constructor() {
     effect(() => {
       const account = this.walletService.currentAccount();
-      const hasSavedProvider = !!localStorage.getItem('active_provider');
-
       if (account) {
         this.vestingService.fetchClaimableAmount(account);
-      } else if (!hasSavedProvider) {
-        this.vestingService.claimableAmount.set(null);
-        this.router.navigate(['/']);
       }
     });
+  }
+
+  public async disconnect() {
+    await this.walletService.disconnectWallet();
+    this.router.navigate(['/']);
   }
 
   public async refresh() {
