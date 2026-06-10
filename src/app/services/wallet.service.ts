@@ -396,6 +396,19 @@ export class WalletService {
     }
   }
 
+  
+  private getMetaMaskProvider(): any | null {
+    const ethereum = (window as any).ethereum;
+  
+    if (!ethereum) return null;
+  
+    if (ethereum.providers?.length) {
+      return ethereum.providers.find((p: any) => p.isMetaMask) || null;
+    }
+  
+    return ethereum.isMetaMask ? ethereum : null;
+  }
+
   public async disconnectWallet() {
     this.log('disconnectWallet: begin');
 
@@ -407,6 +420,26 @@ export class WalletService {
       }
     }
 
+    const provider = this.getMetaMaskProvider();
+
+  if (provider?.request) {
+    try {
+      await provider.request({
+        method: 'wallet_revokePermissions',
+        params: [
+          {
+            eth_accounts: {},
+          },
+        ],
+      });
+
+      this.log('disconnectWallet: MetaMask eth_accounts permission revoked');
+    } catch (e: any) {
+      // Some wallets do not support this method.
+      // MetaMask extension supports it, but keep graceful fallback.
+      this.warn('disconnectWallet: wallet_revokePermissions failed:', e);
+    }
+  }
     this.currentAccount.set(null);
     this.accounts.set([]);
     this.browserProvider = null;
